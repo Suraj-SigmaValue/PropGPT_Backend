@@ -1,0 +1,27 @@
+# Environment & secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+venv/
+
+# Django
+db.sqlite3
+data/response_cache/
+*.pkl
+
+# Node / frontend
+node_modules/
+package-lock.json
+
+# VS Code
+.vscode/
+
+# OS
+.DS_Store
+Pune_Grand_Summary.pkl
+venev/
+env/
+vector_cache/
+.gitignore/
