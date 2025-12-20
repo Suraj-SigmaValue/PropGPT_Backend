@@ -278,17 +278,17 @@ def load_and_clean_data(excel_path, pickle_path, comparison_type, items=None, ye
                 logger.error(f"No data for {comparison_type}s {items}")
                 return None, None, None
             logger.info(f"Filtered data for {comparison_type}s {items}. Shape: {df.shape}")
-        
-        # Year filtering
-        if years is None:
-            logger.info("No year filtering applied (years=None)")
-        else:
+                
+        # Year filtering - only apply if year column exists and comparison type is not project
+        if years and "year" in df.columns and comparison_type.lower() != "project":
             years = [y for y in years if isinstance(y, int) and 1900 <= y <= 9999]
             if years:
                 df = df[df["year"].isin(years)]
                 logger.info(f"Filtered data for years {years}. Shape: {df.shape}")
             else:
                 logger.info("Year filter provided but resulted in empty/invalid set; skipping year filter")
+        elif years and comparison_type.lower() == "project":
+            logger.info("Year filter skipped for project type analysis (no year column in project data)")
         
         # Sort
         sort_cols = [c for c in ["final location", "year"] if c in df.columns]
