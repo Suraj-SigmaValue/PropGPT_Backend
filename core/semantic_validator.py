@@ -58,9 +58,9 @@ class SemanticValidator:
                 r"total sold"
             ],
             "area": [
-                r"carpet area", r"sqft", r"square feet", 
+                r"carpet area", r"sqft", r"square feet",
                 r"area.*range", r"sq ft", r"area.*sqft"
-            ]
+            ],
         }
     
     def _get_query_patterns(self) -> Dict[str, List[Tuple[str, str]]]:

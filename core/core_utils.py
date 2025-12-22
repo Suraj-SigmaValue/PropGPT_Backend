@@ -39,8 +39,8 @@ from .response_cache import SemanticResponseCache
 # Suppress warnings
 os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 
-# GLOBAL DATA CACHE (Singleton pattern for performance)
-_GLOBAL_DATA_CACHE = None
+# GLOBAL DATA CACHE (Removed to avoid hanging issues with large datasets)
+# _GLOBAL_DATA_CACHE = None
 os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
 
 # Configure logging
@@ -190,9 +190,9 @@ def initialize_dataframe(base_dir: Path):
         df_all = pd.concat(combined, ignore_index=True)
         joblib.dump(df_all, pickle_path)
         
-        # Invalidate cache if data is re-initialized
-        global _GLOBAL_DATA_CACHE
-        _GLOBAL_DATA_CACHE = df_all
+        # Invalidate cache if data is re-initialized (Cache removed)
+        # global _GLOBAL_DATA_CACHE
+        # _GLOBAL_DATA_CACHE = df_all
         
         return df_all
     
@@ -203,16 +203,12 @@ def initialize_dataframe(base_dir: Path):
 
 
 def load_and_clean_data(excel_path, pickle_path, comparison_type, items=None, years=None, category=None):
-    global _GLOBAL_DATA_CACHE
     try:
-        if _GLOBAL_DATA_CACHE is not None:
-            df = _GLOBAL_DATA_CACHE.copy()
-            logger.info(f"Loaded data from MEMORY CACHE. Shape: {df.shape}")
-        elif Path(pickle_path).exists():
+        # Load directly from Disk (Pickle) to avoid RAM hanging issues
+        if Path(pickle_path).exists():
             df = joblib.load(pickle_path)
             df.columns = [normalize_colname(str(c)) for c in df.columns]
-            _GLOBAL_DATA_CACHE = df.copy() # Store in cache
-            logger.info(f"Pickle file loaded from DISK and cached. Shape: {df.shape}")
+            logger.info(f"Pickle file loaded from DISK. Shape: {df.shape}")
         else:
             logger.error(f"Pickle file not found at {pickle_path}")
             return None, None, None

@@ -79,7 +79,7 @@ def detect_requirements(query: str) -> List[str]:
     requirements = []
     
     patterns = {
-        'supply': ['supply', 'available', 'inventory', 'stock', 'total units', 'unsold', 'launched'],
+        'supply': ['supply', 'available', 'inventory', 'stock', 'total units', 'unsold', 'launched', 'supplied', 'carpet'],
         'demand': ['demand', 'sold', 'purchased', 'transactions', 'absorbed', 'consumed', 'sales'],
         'price': ['price', 'rate', 'per sqft', 'cost', 'valuation', 'agreement price', 'avg price'],
         'demography': ['demographic', 'demography', 'buyer', 'pincode', 'age range', 'profile'],
