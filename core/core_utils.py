@@ -546,6 +546,9 @@ def clean_response(text: str) -> str:
     # Normalize bullet points
     text = re.sub(r'^\s*[•·∙⋅○●]\s+', '- ', text, flags=re.MULTILINE)
     
+    # Remove literal <br> tags which break some markdown renderers or show up as text
+    text = re.sub(r'<br\s*/?>', ' ', text, flags=re.IGNORECASE)
+    
     return text.strip()
 
 

@@ -49,13 +49,12 @@ class SemanticValidator:
             ],
             "supply": [
                 r"total units", r"available units", r"supplied",
-                r"carpet area supplied", r"inventory", r"capacity",
-                r"total unsold"
+                r"inventory", r"capacity", r"total unsold"
             ],
             "demand": [
                 r"units sold", r"sold units", r"consumed",
                 r"carpet area consumed", r"demand", r"absorbed",
-                r"total sold"
+                r"total sold", r"consumption"
             ],
             "area": [
                 r"carpet area", r"sqft", r"square feet",

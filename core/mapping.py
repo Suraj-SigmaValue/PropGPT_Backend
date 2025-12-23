@@ -58,7 +58,7 @@ COLUMN_MAPPING_Location = {
         "others_carpet_area_consumed(in sqft) - igr",
         "shop_carpet_area_consumed(in sqft) - igr",
     ],
-    "BHK wise Carpet Area  sold or consumed in sqft": [
+    "BHK wise Carpet Area sold or consumed in sqft": [
         "1.5bhk_carpet_area_consumed(in sqft) - igr",
         "1bhk_carpet_area_consumed(in sqft) - igr",
         "2.25bhk_carpet_area_consumed(in sqft) - igr",
@@ -69,7 +69,7 @@ COLUMN_MAPPING_Location = {
         "<1bhk_carpet_area_consumed(in sqft) - igr",
         ">3bhk_carpet_area_consumed(in sqft) - igr",
     ],
-    "broad  Property Type wise Carpet area  sold or consumed in sqft": [
+    "broad Property Type wise Carpet area sold or consumed in sqft": [
         "residential_carpet_area_consumed(in sqft) - igr",
         "commercial_carpet_area_consumed(in sqft) - igr",
         "other_carpet_area_consumed(in sqft) - igr",
@@ -199,7 +199,7 @@ COLUMN_MAPPING_Location = {
         "office - pincode wise carpet area consumed in sqft",
         "shop - pincode wise carpet area consumed in sqft",
     ],
-    "BHK wise Top 10 Buyer Pincode wise Carpet Area  sold or consumed in sqft Percentage(%)": [
+    "BHK wise Top 10 Buyer Pincode wise Carpet Area sold or consumed in sqft Percentage(%)": [
         "<1bhk - pincode wise carpet area consumed in sqft",
         "1bhk - pincode wise carpet area consumed in sqft",
         "1.5bhk - pincode wise carpet area consumed in sqft",
@@ -210,7 +210,7 @@ COLUMN_MAPPING_Location = {
         "3bhk - pincode wise carpet area consumed in sqft",
         ">3bhk - pincode wise carpet area consumed in sqft",
     ],
-    "Property type wise Age Range wise Carpet Area  sold or consumed in sqft Percentage(%)": [
+    "Property type wise Age Range wise Carpet Area sold or consumed in sqft Percentage(%)": [
         "flat - age range wise carpet area consumed in sqft",
         "others - age range wise carpet area consumed in sqft",
         "office - age range wise carpet area consumed in sqft",
@@ -239,7 +239,7 @@ COLUMN_MAPPING_Location = {
         "office - age range wise total sales",
         "shop - age range wise total sales",
     ],
-    "BHK wise Age Range wise Carpet Area  sold or consumed in sqft Percentage(%)": [
+    "BHK wise Age Range wise Carpet Area sold or consumed in sqft Percentage(%)": [
         "<1bhk - age range wise carpet area consumed in sqft",
         "1bhk - age range wise carpet area consumed in sqft",
         "1.5bhk - age range wise carpet area consumed in sqft",
@@ -515,7 +515,7 @@ COLUMN_MAPPING_Location = {
         "3bhk_carpet_area_consumed_rera_sqft",
         ">3bhk_carpet_area_consumed_rera_sqft",
     ],
-    "bhk wise Agreement price  range wise Carpet area consumed": [
+    "bhk wise Agreement price range wise Carpet area consumed": [
         "1bhk - agreement price range carpet area consumed in sqft",
         "2bhk - agreement price range carpet area consumed in sqft",
         "3bhk - agreement price range carpet area consumed in sqft",

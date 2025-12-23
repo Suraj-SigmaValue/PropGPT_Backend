@@ -9,8 +9,7 @@ Contains two agents:
 import json
 import re
 import logging
-from typing import List
-from typing import Dict, Any
+from typing import List, Dict, Any
 
 logger = logging.getLogger(__name__)
 
@@ -25,72 +24,37 @@ def planner_identify_mapping_keys(llm, query: str, candidate_keys: List[str]) ->
         candidate_keys: List of available mapping keys to choose from
     
     Returns:
-        List of selected mapping keys (at most 6, or fewer if fewer are relevant)
+        List of selected mapping keys (at most 8, or fewer if fewer are relevant)
     """
     if not candidate_keys:
         return []
 
     # -------------------------
-    # Local helper: classify query by type (BHK config etc.)
+    # Local helper functions for query analysis
     # -------------------------
     def _classify_query_type(q: str) -> str:
         q = (q or "").lower()
-
-        # BHK / configuration demand-style queries
-        bhk_tokens = [
-            "configuration", "configurations", "config mix",
-            "smaller units", "larger units",
-            "smaller configuration", "larger configuration",
-            "small size", "big size", "bigger units",
-            "1bhk", "2bhk", "3bhk", "4bhk", "bhk",
-        ]
+        bhk_tokens = ["configuration", "config mix", "1bhk", "2bhk", "3bhk", "4bhk", "bhk"]
         if any(tok in q for tok in bhk_tokens):
             return "bhk_config"
-
         return "generic"
 
-    # -------------------------
-    # Local helper: classify metric as supply / demand / both
-    # -------------------------
     def _classify_metric(q: str) -> str:
         q = (q or "").lower()
-
-        supply_tokens = [
-            "supply", "available", "inventory", "stock",
-            "total units", "unsold", "supplied", "carpet",
-        ]
-        demand_tokens = [
-            "demand", "sold", "purchased", "bought",
-            "transactions", "sales count", "absorbed", "consumed",
-        ]
-
+        supply_tokens = ["supply", "available", "total units", "unsold", "supplied", "fsi", "floor space index"]
+        demand_tokens = ["demand", "sold", "purchased", "bought", "transactions", "sales count", "absorbed", "consumed", "consumption"]
         has_supply = any(tok in q for tok in supply_tokens)
         has_demand = any(tok in q for tok in demand_tokens)
-
-        if has_supply and has_demand:
-            return "both"
-        if has_supply:
-            return "supply"
-        if has_demand:
-            return "demand"
+        if has_supply and has_demand: return "both"
+        if has_supply: return "supply"
+        if has_demand: return "demand"
         return "unknown"
 
-    # -------------------------
-    # Local helper: detect demography / pincode analysis queries
-    # -------------------------
     def _is_demography_query(q: str) -> bool:
         q = (q or "").lower()
-        demo_tokens = [
-            "demography", "demographic", "demographics",
-            "buyer profile", "buyer mix", "age profile",
-            "pincode", "pin code", "area-wise buyers", "buyer location",
-            "top 10 buyer", "top buyer area", "top buyer pincode",
-        ]
+        demo_tokens = ["demography", "demographic", "buyer profile", "pincode", "pin code", "age profile"]
         return any(tok in q for tok in demo_tokens)
 
-    # -------------------------
-    # Local helper: detect property type and BHK mentions
-    # -------------------------
     def _detect_property_mentions(q: str) -> dict:
         q = (q or "").lower()
         return {
@@ -114,18 +78,9 @@ def planner_identify_mapping_keys(llm, query: str, candidate_keys: List[str]) ->
 CANDIDATE_KEYS (Allowed Selection Only):
 {json.dumps(candidate_keys, indent=2)}
 
-
-
 You are a **Query-Intent Classification & Mapping-Key Selection Agent** operating under **strict analytical constraints**.
 
 Your **ONLY responsibility** is to return the **minimum correct set of mapping keys** required to answer the user query.
-
-You **must NOT**:
-
-* Explain reasoning
-* Add commentary
-* Generate insights or summaries
-* Infer beyond explicitly stated intent
 
 Your output **must always be a JSON array of mapping keys only**.
 
@@ -133,17 +88,47 @@ Your output **must always be a JSON array of mapping keys only**.
 
 ## 🧠 CORE THINKING FRAMEWORK (INTERNAL – MUST FOLLOW)
 
-Before selecting mapping keys, you must **internally reason in 4 layers**:
+### 🔹 LAYER 1 — PRIMARY MEASURE IDENTIFICATION
+Classify the metric into ONE primary category based on the query focus:
+1. **SUPPLY**: Queries about available inventory, launched items, or total supplied (e.g., supplied, total units, capacity, available
+2. **DEMAND**: Queries about sold/consumed/absorbed items (e.g., units sold, area consumed, transactions).
+3. **DEMOGRAPHY**: Queries about buyer profiles (e.g., pincode, age range).
+4. **PRICE**: Queries about pricing, rates, or sales values (e.g., average price, price per sq ft).
+5. **OTHER**: General or mixed (e.g., location details, totals without supply/demand split).
 
----
+If the query compares categories (e.g., supply vs demand), select keys from both but minimize overlap.
 
-### 🔹 LAYER 1 — PRIMARY MEASURE IDENTIFICATION (MOST IMPORTANT)
 
-First, identify **WHAT is being measured**, independent of filters.
+### 🔹 LAYER 2 — DIMENSIONAL PRIORITY (CRITICAL)
+If the query mentions breakdowns:
+- By config (e.g., "BHK", "bedroom"): Select segmented keys (e.g., "BHK wise ...").
+- By type (e.g., "property type", "flat", "shop"): Select segmented keys (e.g., "Property type wise ...").
+- By demography (e.g., "pincode", "age"): Select segmented keys (e.g., "Buyer Pincode ...", "Age Range ...").
+- Always prefer segmented over aggregate if breakdown is implied.
 
-Ask internally:
+### 🔹 LAYER 3 — COMPARISON TYPE ADAPTATION
+Adapt selection to the analysis level (inferred from query or keys):
+- For locations/cities: Include broad aggregates and shares (e.g., "broad property types Share (%)").
+- For projects: Include project-specific details (e.g., "Type of Project", "Total Phases of Project").
+- Ensure keys are versatile across levels; select minimum that cover the query without assuming type.
 
-> “What is the core metric the user is asking for?”
+### 🔹 LAYER 4 — CONTRADICTION & DRIFT CHECK (SELF-LEARNING LOOP)
+
+Before finalizing output, perform this internal validation:
+
+1. Did I accidentally switch **Supply ↔ Demand** due to filters?
+2. Did I mix **Metadata with Transactions**?
+3. Did I select **more keys than strictly required**?
+4. Can **one key** answer the question instead of many?
+
+If **YES** to any → correct internally before output.
+
+⚠️ **GENERAL MAPPING GUIDANCE** (NEUTRAL)
+- Match keys to query intent via token overlap and category.
+- For demand: Use keys with "sold", "consumed", "transactions".
+- For demography: Use keys with "pincode", "age range", "buyer".
+- For price: Use keys with "price", "rate", "sales (INR)".
+- Avoid bias: No default to specific keys; evaluate all candidates equally.
 
 Classify the metric into **ONE and ONLY ONE** of the following:
 
@@ -157,127 +142,23 @@ Classify the metric into **ONE and ONLY ONE** of the following:
 | **COMPOSITION**    | percentage, share, mix                                   | Composition      |
 | **BUYER PROFILE**  | buyer pincode, age, origin                               | Demographic      |
 
-⚠️ **CRITICAL RULE**
 
-> Filters like *“only residential”*, *“only 2 BHK”*, *“village-wise”*
-> **DO NOT change the metric category**
-> They ONLY restrict the **dimension**, never the **measure**.
 
----
+## 🧩 RULES
+- SELECT ONLY FROM CANDIDATE_KEYS.
+- MINIMUM KEYS: Use the fewest that fully answer the query (aim 3-5; MAX 6-8).
+- NEVER MIX unrelated categories (e.g., supply + price unless query compares).
+- OUTPUT ONLY: JSON array, e.g., ["Key1", "Key2"].
+- No commentary, explanations, or extra text.
 
-### 🔹 LAYER 2 — FILTER DETECTION (NON-PRIMARY)
-
-Detect **qualifiers** such as:
-
-* Property type (Residential / Commercial)
-* BHK type
-* Location / Village / City / Project
-* Phase, tower, age range
-
-📌 **Rule**
-
-> Filters refine **scope**, not **category**
-
-Example:
-
-* ❌ Wrong: Changing Supply → Demand because “residential” was added
-* ✅ Correct: Supply + Residential filter → **Supply key remains unchanged**
-
----
-
-### 🔹 LAYER 3 — GRANULARITY NORMALIZATION (PROJECT / LOCATION / CITY SAFE)
-
-You must normalize logic across:
-
-* Project-level queries
-* Location-level queries
-* City-level queries
-
-📌 **Rule**
-
-> Granularity NEVER affects mapping-key category
-> Only the **aggregation level**, which is handled downstream.
-
----
-
-### 🔹 LAYER 4 — CONTRADICTION & DRIFT CHECK (SELF-LEARNING LOOP)
-
-Before finalizing output, perform this internal validation:
-
-1. Did I accidentally switch **Supply ↔ Demand** due to filters?
-2. Did I mix **Metadata with Transactions**?
-3. Did I select **more keys than strictly required**?
-4. Can **one key** answer the question instead of many?
-
-If **YES** to any → correct internally before output.
-
----
-
-## 🧩 MAPPING KEY SELECTION RULES (STRICT)
-
-### ✅ SELECT ONLY FROM THE DEFINED LIST
-
-(You are NOT allowed to invent keys)
-
-### ✅ MAX 4–5 KEYS
-
-Prefer **1–2 keys** whenever possible.
 
 ### ❌ NEVER MIX:
 
 * Supply + Demand
 * Metadata + Sales
 * Infrastructure + Units (unless explicitly asked)
+"""
 
----
-
-## 🧪 BEHAVIOR ON YOUR FAILURE CASE (FIXED)
-
-### Query:
-
-> “Can you give me carpet area supplied for these villages **only in residential type property**?”
-
-### Correct Internal Logic:
-
-* **Metric detected**: “carpet area supplied” → **SUPPLY**
-* “Residential” → **Filter only**
-* “Villages” → **Granularity only**
-
-### ✅ Correct Output:
-
-```json
-[
-  "Property type wise Total Carpet Area (in sq ft)"
-]
-```
-
-⚠️ Under NO circumstances should this switch to:
-
-* Carpet area consumed ❌
-* Units sold ❌
-* Demand keys ❌
-
----
-
-## 📌 FINAL OUTPUT FORMAT (ABSOLUTE)
-
-You MUST return:
-
-* Only a valid JSON array
-* No text before or after
-* No markdown
-* No explanations
-
-Example:
-
-```json
-[
-  "Total Carpet Area (In sq ft)"
-]
-```
-
-
-    """
     try:
         raw_resp = llm.invoke(sys_instr + "\n\n" + prompt)
         raw_text = getattr(raw_resp, "content", None) or str(raw_resp)
@@ -285,180 +166,87 @@ Example:
         if start == -1 or end <= 0:
             raise ValueError("Planner did not return JSON array")
         parsed = json.loads(raw_text[start:end])
-        if not isinstance(parsed, list):
-            raise ValueError("Planner output is not a list")
         filtered = [key for key in parsed if key in candidate_keys]
 
-        # -------------------------
-        # Deterministic hard rules (do NOT rely only on LLM)
-        # -------------------------
+        # --- PROCESS-LEVEL DIMENSIONAL ENFORCEMENT ---
+        # Ensure that if a dimension is in query, at least one segmented key is selected
+        dimensions_to_check = []
+        if property_mentions["has_bhk_type"]: dimensions_to_check.append("bhk wise")
+        if "pincode" in q_low or "buyer" in q_low: dimensions_to_check.append("pincode")
+        if "age" in q_low: dimensions_to_check.append("age range")
+        
+        for dim in dimensions_to_check:
+            # Check if any currently selected key covers this dimension
+            if not any(dim in k.lower() for k in filtered):
+                # Search candidate pool for a key matching BOTH dimension AND metric
+                potential_keys = [k for k in candidate_keys if dim in k.lower()]
+                # Metric keywords to narrow down
+                metric_keywords = ["sold", "units", "carpet area", "sales"] if metric_type in ("demand", "both", "unknown") else ["total units", "supplied", "unsold"]
+                
+                scored_candidates = []
+                for k in potential_keys:
+                    k_l = k.lower()
+                    m_score = sum(1 for kw in metric_keywords if kw in k_l)
+                    scored_candidates.append((k, m_score))
+                
+                scored_candidates.sort(key=lambda x: x[1], reverse=True)
+                if scored_candidates and scored_candidates[0][0] not in filtered:
+                    filtered.append(scored_candidates[0][0])
 
-        # 1) If query is about "location", ensure "Location" mapping key is present
+        # Always include Location metadata if query asks for location/village names
         if "location" in q_low and "Location" in candidate_keys and "Location" not in filtered:
             filtered.insert(0, "Location")
 
-        # 2) If query is BHK/configuration-style, ensure BHK demand key is present
-        if q_type == "bhk_config":
-            if "BHK types wise units sold" in candidate_keys and "BHK types wise units sold" not in filtered:
-                filtered.append("BHK types wise units sold")
-
-        # 3) SUPPLY vs DEMAND ENFORCEMENT with granular property/BHK detection
-        if metric_type in ("supply", "both"):
-            # Priority order for supply keys based on query specificity
-            supply_key_priority = []
-            
-            if property_mentions["has_bhk_type"]:
-                # BHK-specific supply query
-                supply_key_priority.extend([
-                    "BHK wise total units",
-                    "BHK wise total carpet area in sqft",
-                    "Property Type wise total units", 
-                    "total units"
-                ])
-            elif property_mentions["has_property_type"]:
-                # Property-type-specific supply query
-                supply_key_priority.extend([
-                    "Property Type wise total units",
-                    "Property type wise Total Carpet Area (in sq ft)",
-                    "total units"
-                ])
-            else:
-                # General supply query
-                supply_key_priority.extend([
-                    "total units",
-                    "Total Carpet Area (In sq ft)",
-                    "Property Type wise total units",
-                    "BHK wise total units"
-                ])
-            
-            # Add priority supply keys that are available
-            for key in supply_key_priority:
-                if key in candidate_keys and key not in filtered:
-                    filtered.append(key)
-
-            # CRITICAL FIX: For supply-only queries, REMOVE demand/sold keys
-            if metric_type == "supply":
-                # Remove any demand-related keys
-                filtered = [k for k in filtered if not (
-                    "units sold" in k.lower() or 
-                    "sold" in k.lower() or 
-                    "total sales" in k.lower() or
-                    "demand" in k.lower()
-                )]
-            else:
-                # For "both", push sold/sales keys to the end
-                demand_like = []
-                non_demand_like = []
-                for k in filtered:
-                    if ("units sold" in k.lower()) or ("sold" in k.lower()) or ("total sales" in k.lower()):
-                        demand_like.append(k)
-                    else:
-                        non_demand_like.append(k)
-                filtered = non_demand_like + demand_like
-
-        # 4) DEMOGRAPHY / PINCODE ENFORCEMENT
-        if is_demo:
-            demo_key = "Top 10 Buyer Pincode units sold"
-            if demo_key in candidate_keys and demo_key not in filtered:
-                filtered.append(demo_key)
-
-        # Limit to max 6 keys, keep existing behaviour if list is empty
+        # Fallback to general classification rules if LLM returned nothing
         if not filtered:
-            return candidate_keys[: min(6, len(candidate_keys))]
-        return filtered[:6]
+             raise Exception("LLM returned no valid keys")
+
+        return filtered[:8]
 
     except Exception as exc:
-        logger.warning("[planner_identify_mapping_keys] fallback due to: %s", exc)
-        q_low = (query or "").lower()
-        query_tokens = set(re.findall(r"[\w>]+", q_low))
-        heuristic = [
-            key for key in candidate_keys
-            if any(token in key.lower() for token in query_tokens)
-        ]
+        logger.error("[planner_identify_mapping_keys] GLOBAL FALLBACK: %s", exc)
+        q_low_f = (query or "").lower()
+        
+        # --- DYNAMIC SCORING FALLBACK ---
+        intent_dimensions = []
+        if any(tok in q_low_f for tok in ["bhk", "bedroom", "units"]): intent_dimensions.append("bhk wise")
+        if any(tok in q_low_f for tok in ["pincode", "pin code", "buyer"]): intent_dimensions.append("pincode")
+        if "age" in q_low_f: intent_dimensions.append("age range")
+        if any(tok in q_low_f for tok in ["property", "residential", "commercial", "flat", "shop"]): intent_dimensions.append("property type")
 
-        filtered = heuristic or candidate_keys[: min(6, len(candidate_keys))]
+        metric = _classify_metric(query)
+        q_tokens = set(re.findall(r"[\w>]+", q_low_f))
+        
+        scored_keys = []
+        for key in candidate_keys:
+            k_low = key.lower()
+            score = 0
+            # Dimension Scoring
+            for dim in intent_dimensions:
+                if dim in k_low: score += 10
+            # Metric Matching
+            if metric == "supply" and any(tok in k_low for tok in ["total units", "supply", "carpet area supplied"]): score += 5
+            if metric == "demand" and any(tok in k_low for tok in ["sold", "consumed", "consumption", "sales"]): score += 5
+            # Contradiction Penalty
+            if metric == "supply" and any(tok in k_low for tok in ["sold", "consumed", "sales"]): score -= 30
+            if metric == "demand" and any(tok in k_low for tok in ["total units", "supplied", "unsold"]): score -= 30
+            # Token overlap
+            for tok in q_tokens:
+                if len(tok) > 3 and tok in k_low: score += 1
+            scored_keys.append((key, score))
 
-        # Same deterministic guarantees in fallback
-
-        if "location" in q_low and "Location" in candidate_keys and "Location" not in filtered:
+        scored_keys.sort(key=lambda x: x[1], reverse=True)
+        filtered = [k[0] for k in scored_keys if k[1] > 0]
+        
+        if "location" in q_low_f and "Location" in candidate_keys and "Location" not in filtered:
             filtered.insert(0, "Location")
 
-        if _classify_query_type(query) == "bhk_config":
-            if "BHK types wise units sold" in candidate_keys and "BHK types wise units sold" not in filtered:
-                filtered.append("BHK types wise units sold")
-
-        # Enhanced supply handling in fallback
-        metric_type_fallback = _classify_metric(query)
-        property_mentions_fallback = _detect_property_mentions(query)
-        
-        if metric_type_fallback in ("supply", "both"):
-            supply_key_priority = []
-            
-            if property_mentions_fallback["has_bhk_type"]:
-                supply_key_priority.extend([
-                    "BHK wise total units",
-                    "BHK wise total carpet area in sqft",
-                    "Property Type wise total units", 
-                    "total units"
-                ])
-            elif property_mentions_fallback["has_property_type"]:
-                supply_key_priority.extend([
-                    "Property Type wise total units",
-                    "Property type wise Total Carpet Area (in sq ft)",
-                    "total units"
-                ])
-            else:
-                supply_key_priority.extend([
-                    "total units",
-                    "Total Carpet Area (In sq ft)",
-                    "Property Type wise total units",
-                    "BHK wise total units"
-                ])
-            
-            for key in supply_key_priority:
-                if key in candidate_keys and key not in filtered:
-                    filtered.append(key)
-
-            # CRITICAL FIX: For supply-only queries, REMOVE demand/sold keys (fallback)
-            if metric_type_fallback == "supply":
-                # Remove any demand-related keys
-                filtered = [k for k in filtered if not (
-                    "units sold" in k.lower() or 
-                    "sold" in k.lower() or 
-                    "total sales" in k.lower() or
-                    "demand" in k.lower()
-                )]
-            else:
-                # For "both", push sold/sales keys to the end
-                demand_like = []
-                non_demand_like = []
-                for k in filtered:
-                    if ("units sold" in k.lower()) or ("sold" in k.lower()) or ("total sales" in k.lower()):
-                        demand_like.append(k)
-                    else:
-                        non_demand_like.append(k)
-                filtered = non_demand_like + demand_like
-
-        if _is_demography_query(query):
-            demo_key = "Top 10 Buyer Pincode units sold"
-            if demo_key in candidate_keys and demo_key not in filtered:
-                filtered.append(demo_key)
-
-        return filtered[:6]
+        return filtered[:8] if filtered else candidate_keys[: min(6, len(candidate_keys))]
 
 
 def agent_pick_relevant_columns(llm, query: str, selected_keys: List[str], candidate_columns: List[str]) -> List[str]:
     """
-    Column Agent: Selects the most relevant columns from candidates based on user query and selected keys.
-    
-    Args:
-        llm: Language model instance (LangChain LLM)
-        query: User's analysis query
-        selected_keys: List of selected mapping keys (from planner agent)
-        candidate_columns: List of available columns to choose from
-    
-    Returns:
-        List of selected column names (typically 7-20 relevant columns)
+    Column Agent: Selects relevant columns from candidates based on query and mapping keys.
     """
     if not candidate_columns:
         return []
@@ -467,323 +255,71 @@ def agent_pick_relevant_columns(llm, query: str, selected_keys: List[str], candi
         "You select strictly relevant dataframe column names for the user's analytics query. "
         "Return ONLY a JSON list of exact column names from CANDIDATE_COLUMNS—no extra text."
     )
-    prompt = f"""User Query:
-{query}
+    prompt = f"""User Query: {query}
+Selected Mapping Keys: {json.dumps(selected_keys, indent=2)}
+CANDIDATE_COLUMNS: {json.dumps(candidate_columns, indent=2)}
 
-Selected Mapping Keys (Context Only — Do Not Output):
-{json.dumps(selected_keys, indent=2)}
-
-CANDIDATE_COLUMNS (Allowed Selection Only):
-{json.dumps(candidate_columns, indent=2)}
-
-You are a strict Column-Selection Agent.
-Your ONLY task is to choose the most relevant columns required to answer the user query,
-based on the already selected mapping keys.
-
-You must NOT generate explanations, summaries, or analysis.
-You must ONLY return a JSON array of column names.
-
-────────────────────────────────────
-CORE SELECTION RULES (STRICT)
-────────────────────────────────────
-
-1. RELEVANCE ONLY
-- Select ONLY columns that directly help answer the user query.
-- Avoid generic, metadata-only, duplicate, or noisy columns.
-- If a column does not materially improve the answer, DO NOT select it.
-
-2. MAPPING KEY COVERAGE (MANDATORY)
-- You MUST select at least ONE column for EACH mapping key listed in "Selected Mapping Keys".
-- No mapping key may be ignored.
-- If a mapping key has multiple relevant columns, select the most descriptive and informative ones.
-
-3. COLUMN COUNT LIMIT
-- Select the smallest possible set of columns that is still sufficient.
-- Preferred range: 7–20 columns total.
-- If fewer than 10 columns are sufficient, select fewer.
-- Selecting unnecessary columns is considered an error.
-
-4. DEMAND-SPECIFIC RULE
-- If the user query refers to "Demand" AND no specific demand subtype is mentioned:
-  → Default to selecting columns related to:
-    "Property type wise Units Sold"
-- Do NOT mix supply-related columns unless explicitly requested.
-
-5. CONFLICT AVOIDANCE
-- Do NOT mix:
-  - Supply columns with Demand queries
-  - Pricing columns with Unit count queries
-  - Metadata columns with transactional analysis
-- Every selected column must align with BOTH:
-  - The user query intent
-  - The selected mapping keys
-
-────────────────────────────────────
-VALIDATION CHECK (INTERNAL)
-────────────────────────────────────
-
-Before finalizing the output:
-- Confirm each selected column exists in CANDIDATE_COLUMNS
-- Confirm each mapping key has at least one selected column
-- Confirm no redundant or overlapping columns are included
-- Confirm column count is minimal and sufficient
-
-────────────────────────────────────
-OUTPUT FORMAT (STRICT)
-────────────────────────────────────
-
-Return ONLY a valid JSON array of column names.
-No markdown.
-No explanations.
-No extra text.
-
-Example Output:
-[
-  "Property Type",
-  "Units Sold",
-  "BHK Type"
-]
-
-    """
+RULES:
+1. Select at least ONE column per mapping key.
+2. If dimensional breakdown (BHK, Pincode) is requested, prioritize specific columns for those segments.
+3. Max 25-40 columns for detailed breakdowns.
+4. Return ONLY a JSON array.
+"""
     try:
         resp = llm.invoke(sys_instr + "\n\n" + prompt)
         raw = getattr(resp, "content", None) or str(resp)
         s, e = raw.find("["), raw.rfind("]") + 1
-        if s == -1 or e <= 0:
-            raise ValueError("Agent did not return a JSON list.")
+        if s == -1 or e <= 0: raise ValueError("Invalid JSON")
         picked = json.loads(raw[s:e])
-        if not isinstance(picked, list):
-            raise ValueError("Agent output is not a list.")
         picked = [c for c in picked if c in candidate_columns]
-        picked = list(dict.fromkeys(picked))
         
-        # If agent returned empty, fallback to simple matching based on keys
         if not picked and selected_keys:
-            logger.info("Agent returned 0 columns, using fallback based on keys.")
-            fallback = []
+            # Simple heuristic fallback
             for key in selected_keys:
                 for col in candidate_columns:
-                    # Loose matching: if key is part of column name
-                    if key.lower() in col.lower():
-                        fallback.append(col)
-            picked = fallback[:20]
-
-        return picked or candidate_columns[: min(15, len(candidate_columns))]
+                    if key.lower() in col.lower(): picked.append(col)
+        
+        return list(dict.fromkeys(picked)) or candidate_columns[: min(15, len(candidate_columns))]
 
     except Exception as exc:
-        logger.warning("[agent_pick_relevant_columns] fallback due to: %s", exc)
-        # Fallback: select columns that loosely match the selected keys
+        logger.warning("[agent_pick_relevant_columns] fallback: %s", exc)
         fallback = []
-        if selected_keys:
-            for key in selected_keys:
-                for col in candidate_columns:
-                    if key.lower() in col.lower():
-                        fallback.append(col)
-        
-        return fallback[:20] or candidate_columns[: min(15, len(candidate_columns))]
+        for key in selected_keys:
+            for col in candidate_columns:
+                if key.lower() in col.lower(): fallback.append(col)
+        return fallback[:25] or candidate_columns[: min(15, len(candidate_columns))]
 
 
-def agent_correction_mapping(llm, query: str, old_keys: List[str], candidate_keys: List[str]) -> List[str]:
+def agent_correction_mapping(llm, query: str, old_keys: List[str], candidate_keys: List[str]) -> Dict[str, Any]:
     """
-    Correction Agent: Proposes NEW mapping keys assuming the old ones were incorrect (Thumbs Down).
-    
-    Args:
-        llm: Language model instance
-        query: User's original query
-        old_keys: The keys used in the rejected response
-        candidate_keys: All available keys
-        
-    Returns:
-        New list of mapping keys
+    Correction Agent for Thumbs Down feedback.
     """
-    if not candidate_keys:
-        return []
-
-    sys_instr = (
-        "You are a correction assistant. The user provided negative feedback (Thumbs Down) for a previous answer. "
-        "The previous answer used a specific set of mapping keys which the user ostensibly found incorrect or insufficient. "
-        "Your task: Re-analyze the query and select BETTER mapping keys from CANDIDATE_KEYS. "
-        "Avoid simply repeating the exact same set if possible, unless you are strictly convinced they are the only correct ones "
-        "(in which case, maybe add a missing key). "
-        "Return ONLY a JSON list of mapping keys."
-    )
-    
-    prompt = f"""
-    ### SYSTEM ROLE: REINFORCEMENT LEARNING CORRECTION AGENT
-
-You are a specialized Mapping-Key Correction Agent operating inside a reinforcement learning loop.
-You are invoked ONLY because the previous mapping decision received a NEGATIVE REWARD (User Thumbs Down).
-
-Your task is to diagnose the failure, change strategy, and produce a corrected mapping
-that is logically distinct and more aligned with the user’s intent.
-
-────────────────────────────────────
-CURRENT STATE
-────────────────────────────────────
-
-1. User Query:
-"{query}"
-
-2. Rejected Mapping Policy (Incorrect Selection):
-{json.dumps(old_keys, indent=2)}
-
-3. Action Space (Allowed Candidate Keys Only):
-{json.dumps(candidate_keys, indent=2)}
-
-────────────────────────────────────
-OPTIMIZATION OBJECTIVE
-────────────────────────────────────
-
-Your objective is to maximize user reward by selecting a NEW and CORRECT mapping strategy.
-
-You must apply Reflexion:
-- Identify the logical failure in the previous mapping
-- Explicitly change the selection approach
-- Avoid repeating the same assumptions
-
-This is NOT a retry — it is a correction.
-
-────────────────────────────────────
-STEP 1: DIAGNOSTIC / CRITIQUE PHASE
-────────────────────────────────────
-
-Analyze WHY the rejected keys failed.
-
-Check for common failure modes:
-- Supply vs Demand inversion (planned vs sold)
-- Wrong abstraction level (aggregate vs granular)
-- Metadata vs transactional confusion
-- Misinterpreted intent (profile vs performance)
-- Over-selection or under-selection of keys
-- Selection of descriptive keys instead of analytical keys
-
-Assume:
-- The user’s negative feedback implies the mapping was logically incorrect or irrelevant
-- The issue is with mapping choice, not user phrasing
-
-────────────────────────────────────
-STEP 2: STRATEGY SHIFT / CORRECTION PHASE
-────────────────────────────────────
-
-Select a DIFFERENT set of mapping keys that better satisfy the query.
-
-Mandatory constraints:
-- You MUST NOT output the same set of keys as the rejected policy
-- At least one key must be different
-- Prefer fewer, higher-signal keys over broad coverage
-- Select ONLY from the provided Candidate Keys
-
-Heuristics:
-- If the previous mapping was too granular → move more abstract
-- If it was too abstract → move more concrete
-- If it focused on structure → move to performance
-- If it focused on counts → move to value or distribution
-- If the query implies higher-level reasoning (e.g., “Anti-Gravity”):
-  → Prefer computed, aggregated, or parent-category keys
-
-────────────────────────────────────
-KEY SELECTION RULES (STRICT)
-────────────────────────────────────
-
-- Select ONLY keys that directly correct the diagnosed failure
-- Do NOT add exploratory or “just in case” keys
-- Keep the set minimal and purposeful
-- Do NOT exceed logical necessity
-
-────────────────────────────────────
-OUTPUT FORMAT (STRICT)
-────────────────────────────────────
-
-Return ONLY valid JSON.
-No markdown.
-No extra text.
-
-{{
-  "reasoning_trace": "Concise explanation of why the previous keys failed and how the new keys correct that failure.",
-  "corrected_keys": ["key1", "key2"]
-}}
-
-    """
+    sys_instr = "You are a correction assistant. User disliked previous answer. Provide BETTER mapping keys."
+    prompt = f"Query: {query}\nRejected: {json.dumps(old_keys)}\nCandidates: {json.dumps(candidate_keys)}\nReturn JSON: {{\"reasoning_trace\": \"...\", \"corrected_keys\": [...]}}"
     
     try:
         resp = llm.invoke(sys_instr + "\n\n" + prompt)
         raw = getattr(resp, "content", None) or str(resp)
-        s, e = raw.find("["), raw.rfind("]") + 1
-        if s == -1 or e <= 0:
-            # Fallback: Just return the old keys if parsing fails, or try heuristic
-            return old_keys
-        
-        parsed = json.loads(raw[s:e])
-        if not isinstance(parsed, list):
-            return old_keys
-            
-        filtered = [k for k in parsed if k in candidate_keys]
-        if not filtered:
-             # If agent went rogue and returned invalid keys, fallback to old keys or top candidates
-             return candidate_keys[:3]
-             
-        return filtered
-        
-    except Exception as e:
-        logger.warning(f"Correction agent failed: {e}")
-        return old_keys
+        s, e = raw.find("{"), raw.rfind("}") + 1
+        return json.loads(raw[s:e])
+    except:
+        return {"reasoning_trace": "Fallback due to error", "corrected_keys": candidate_keys[:3]}
 
 
-# Add these validation functions at the end of agents.py
 def universal_validate_selection(query: str, selected_keys: List[str], selected_columns: List[str]) -> Dict[str, Any]:
-    """
-    Simple validation function.
-    """
+    """Simple validation."""
     errors = []
     warnings = []
-    suggestions = []
-    
-    # Check if we have keys and columns
-    if not selected_keys:
-        errors.append("No mapping keys selected")
-        suggestions.append("Please select at least one mapping key")
-    
-    if not selected_columns:
-        errors.append("No columns selected")
-        suggestions.append("Please select relevant data columns")
-    
-    # Simple semantic check based on query
-    query_lower = query.lower()
-    
-    # Check for demographic queries
-    if any(term in query_lower for term in ["demographic", "pincode", "age", "buyer"]):
-        has_demo = any(any(demo_term in key.lower() for demo_term in ["pincode", "age", "buyer", "demograph"]) 
-                      for key in selected_keys)
-        if not has_demo:
-            warnings.append("Query mentions demographics but no demographic keys selected")
-    
-    # Check for supply queries
-    if any(term in query_lower for term in ["supply", "available", "inventory", "total units"]):
-        has_supply = any(any(supply_term in key.lower() for supply_term in ["total units", "available", "supply"])
-                        for key in selected_keys)
-        if not has_supply:
-            warnings.append("Query mentions supply but no supply keys selected")
-    
-    # Check for demand queries
-    if any(term in query_lower for term in ["sold", "demand", "transactions", "sales"]):
-        has_demand = any(any(demand_term in key.lower() for demand_term in ["sold", "demand", "transactions"])
-                        for key in selected_keys)
-        if not has_demand:
-            warnings.append("Query mentions demand but no demand keys selected")
+    if not selected_keys: errors.append("No keys selected")
+    if not selected_columns: errors.append("No columns selected")
     
     return {
         "is_valid": len(errors) == 0,
         "errors": errors,
         "warnings": warnings,
-        "suggestions": suggestions,
-        "query_categories": {}  # Simple placeholder
+        "suggestions": [],
+        "query_categories": {}
     }
 
-
 def validate_selected_columns(query: str, selected_keys: List[str], selected_columns: List[str]) -> Dict[str, Any]:
-    """Wrapper for backward compatibility."""
     return universal_validate_selection(query, selected_keys, selected_columns)
-
-
-# Add missing import at the top
-from typing import Dict, Any
