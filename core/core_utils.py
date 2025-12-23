@@ -9,8 +9,9 @@ import logging
 import re
 from hashlib import md5
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Union
 import textwrap
+import ast
 import pandas as pd
 import tiktoken
 from dotenv import load_dotenv
@@ -346,7 +347,7 @@ def create_documents(df, item_ids: List[str], defaults, columns_by_key: Dict[str
 
             if comparison_type.strip().lower() == "project" or "year" not in df.columns:
                 for col in valid_cols:
-                    value = defaults.get(col, 'N/A')
+                    value = defaults.get(col, 0)
                     if not item_df.empty and col in item_df.columns:
                         try:
                             value = item_df.iloc[0][col]
@@ -358,8 +359,28 @@ def create_documents(df, item_ids: List[str], defaults, columns_by_key: Dict[str
                     year_values = []
                     for year in years:
                         year_df = item_df[item_df["year"] == year] if not item_df.empty else pd.DataFrame()
-                        value = year_df[col].iloc[0] if not year_df.empty and col in year_df.columns else defaults.get(col, 'N/A')
-                        year_values.append(f"{year}:{value}")
+                        
+                        val = defaults.get(col, 0)
+                        if not year_df.empty and col in year_df.columns:
+                            val = year_df[col].iloc[0]
+
+                        # Check if value is a string-ified dict/list (common for demographic data)
+                        if isinstance(val, str) and (val.strip().startswith('{') or val.strip().startswith('[')):
+                            try:
+                                parsed = ast.literal_eval(val)
+                                if isinstance(parsed, dict):
+                                    # Format dict as "Key: Value, Key: Value"
+                                    # Limit to top 10 items if it's huge
+                                    items_list = list(parsed.items())
+                                    formatted_items = [f"{k}: {v}" for k, v in items_list[:15]]
+                                    val_str = ", ".join(formatted_items)
+                                    val = f"{{ {val_str} }}"
+                                elif isinstance(parsed, list):
+                                    val = f"{parsed}" 
+                            except:
+                                pass # Keep original string if parse fails
+
+                        year_values.append(f"{year}:{val}")
                     content_lines.append(f"{item_id}_{mapping_key}_{col}: {', '.join(year_values)}")
 
         if content_lines:
@@ -457,14 +478,26 @@ def compute_metrics(df: pd.DataFrame, mapping_keys: List[str], columns_by_key: D
                     year_values = {}
                     for year in [2020, 2021, 2022, 2023, 2024]:
                         year_df = item_df[item_df["year"] == year]
+                        val_to_use = 0.0
+                        
                         if not year_df.empty and col in year_df.columns:
-                            try:
-                                value = float(year_df[col].iloc[0])
-                            except:
-                                value = 0.0
+                            raw_val = year_df[col].iloc[0]
+                            
+                            # Handle string-ified dict/list
+                            if isinstance(raw_val, str) and (raw_val.strip().startswith('{') or raw_val.strip().startswith('[')):
+                                try:
+                                    val_to_use = ast.literal_eval(raw_val)
+                                except:
+                                    val_to_use = raw_val # Return raw string if parse fails
+                            else:
+                                try:
+                                    val_to_use = float(raw_val)
+                                except:
+                                    val_to_use = 0.0
                         else:
-                            value = 0.0
-                        year_values[str(year)] = value
+                            val_to_use = 0.0
+                            
+                        year_values[str(year)] = val_to_use
                     key_metrics[col] = year_values
                     
             if key_metrics:

@@ -1592,6 +1592,8 @@ COLUMN_MAPPING_City = {
         "shop_carpet_area_supplied_rera_sqft",
         "flat_carpet_area_supplied_rera_sqft",
     ],
+
+
 }
 
 

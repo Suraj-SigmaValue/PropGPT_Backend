@@ -1,31 +1,38 @@
 # -*- coding: utf-8 -*-
 
 """
+prompt.py
+
 Prompt templates for PropGPT real-estate analysis.
-Updated with new "Expert Real Estate Market Analyst" persona.
+Modified to be more “agent-friendly” and scope-safe:
+
+Key upgrades
+- Pass Items / Mapping Keys / Columns as JSON arrays (exact, unambiguous, no comma-parsing ambiguity).
+- Add explicit “allowed entities” lock using the same JSON arrays.
+- Make “category_summary” actually usable (optional block, included only if provided).
+- Keep token-safe chat history truncation.
 """
 
 from typing import List, Dict, Optional
+import json
 
 
 def format_chat_history(chat_history: List[Dict[str, str]]) -> str:
     """Format chat history for inclusion in prompt."""
     if not chat_history:
         return "No previous conversation."
-    
+
     formatted = []
     for msg in chat_history:
-        role = msg["role"].upper()
-        content = msg["content"]
-        # Truncate very long messages to save tokens
+        role = (msg.get("role") or "").upper()
+        content = msg.get("content") or ""
         if len(content) > 500:
             content = content[:500] + "..."
         formatted.append(f"{role}: {content}")
-    
+
     return "\n".join(formatted)
 
 
-# The new comprehensive system prompt provided by the user
 BASE_SYSTEM_PROMPT = """
 
 # **Senior Real Estate Investment Strategist AI — Enterprise Prompt (v1.1)**
@@ -139,39 +146,28 @@ These rules are **mandatory** and override any other formatting instruction.
 
    **Year-wise comparison (Preferred):**
 
-   ```
-   | Metric | 2020 | 2021 | 2022 | 2023 | 2024 |
-   |--------|------|------|------|------|------|
-   ```
-
-   **Entity-wise comparison (Fallback):**
-
-   ```
-   | Year | Entity A | Entity B |
-   |------|----------|----------|
-   ```
 
 5. **Data Absence Handling**
 
-   * Missing value → `Data Not Available`
-   * Zero value → `0`
-   * Never leave table cells blank
+* Missing value → `Data Not Available`
+* Zero value → `0`
+* Never leave table cells blank
 
 6. **Formatting Enforcement**
 
-   * Use **STRICT Markdown pipe tables**
-   * No HTML
-   * No line breaks inside cells
-   * No commentary text inside tables
+* Use **STRICT Markdown pipe tables**
+* No HTML
+* No line breaks inside cells
+* No commentary text inside tables
 
 7. **Self-Validation Requirement**
 
-   * Before final output, internally validate:
+* Before final output, internally validate:
 
-     * No commas separating values inside any table cell
-     * No year–value pairs in a single cell
-     * No mixed metrics in one row
-   * If validation fails → **rebuild the table before responding**
+  * No commas separating values inside any table cell
+  * No year–value pairs in a single cell
+  * No mixed metrics in one row
+* If validation fails → **rebuild the table before responding**
 
 Failure to comply invalidates the response.
 
@@ -231,95 +227,132 @@ If an entity is not selected, **it does not exist**.
 Your output must enable an **immediate capital decision** —
 **without hallucination, leakage, or inference.**
 
-
 """
 
 
+def _json_block(obj) -> str:
+ return json.dumps(obj, ensure_ascii=False, indent=2)
+
+
 def _build_generic_prompt(
-    question: str,
-    items: List[str],
-    mapping_keys: List[str],
-    selected_columns: List[str],
-    context: str,
-    category_summary: str,
-    comparison_type: str,
-    chat_history: Optional[List[Dict[str, str]]] = None
+ question: str,
+ items: List[str],
+ mapping_keys: List[str],
+ selected_columns: List[str],
+ context: str,
+ category_summary: str,
+ comparison_type: str,
+ chat_history: Optional[List[Dict[str, str]]] = None
 ) -> str:
-    """Internal helper to build the final prompt string."""
-    
-    # Create items list for display (cap at 15 for prompt sanity)
-    MAX_DISPLAY_ITEMS = 15
-    if not items:
-        items_display = f"Selected {comparison_type}s"
-    elif len(items) == 1:
-        items_display = items[0]
-    elif len(items) <= MAX_DISPLAY_ITEMS:
-        items_display = ", ".join(items[:-1]) + f" and {items[-1]}"
-    else:
-        items_display = ", ".join(items[:MAX_DISPLAY_ITEMS]) + f" and {len(items) - MAX_DISPLAY_ITEMS} others"
+ """
+ Internal helper to build the final prompt string.
 
-    history_str = format_chat_history(chat_history) if chat_history else "No previous conversation."
+ Notes:
+ - We pass items/keys/columns as JSON arrays to prevent ambiguity.
+ - We add an explicit ALLOWED ENTITIES contract to reduce leakage.
+ """
 
-    # Construct the prompt
-    return f"""{BASE_SYSTEM_PROMPT}
+ items = items or []
+ mapping_keys = mapping_keys or []
+ selected_columns = selected_columns or []
+
+ history_str = format_chat_history(chat_history) if chat_history else "No previous conversation."
+
+ # Optional: include category_summary only when provided (keeps prompt cleaner)
+ category_summary_block = ""
+ if (category_summary or "").strip():
+     category_summary_block = f"""
+CATEGORY SUMMARY (for your understanding, do not invent beyond this):
+{category_summary}
+"""
+
+ return f"""{BASE_SYSTEM_PROMPT}
 
 PREVIOUS CONVERSATION HISTORY:
 {history_str}
 
 REQUEST DETAILS:
 - Query: "{question}"
-- Type: {comparison_type} Analysis
-- Items involved: {items_display}
-- Categories (Mapping Keys): {", ".join(mapping_keys)}
-- Selected Data Columns: {", ".join(selected_columns)}
+- Analysis Type: {comparison_type}
+- Allowed Entities (STRICT; do not introduce anything outside this list):
+{_json_block(items)}
 
-RETRIEVED EVIDENCE (Context Data):
+- Selected Mapping Keys (STRICT; do not add extra keys):
+{_json_block(mapping_keys)}
+
+- Selected Data Columns (STRICT; use only these columns from the evidence):
+{_json_block(selected_columns)}
+{category_summary_block}
+
+RETRIEVED EVIDENCE (Absolute Source of Truth):
 {context}
 
-(Note: The data provided in RETRIEVED EVIDENCE is the absolute source of truth. Every metric listed in 'Categories (Mapping Keys)' must be reflected in your structured response using this data.)
+NON-NEGOTIABLE EXECUTION NOTES:
+1) You must answer ONLY for the Allowed Entities list above.
+2) You must reflect EVERY mapping key in your structured response.
+3) If a mapping key is requested but the evidence lacks the metric, write "Data Not Available".
+4) Do NOT infer sub-areas, projects, or locations beyond the Allowed Entities list.
 """
 
 
 def build_location_prompt(
-    question: str,
-    items: List[str],
-    mapping_keys: List[str],
-    selected_columns: List[str],
-    context: str,
-    category_summary: str,
-    chat_history: Optional[List[Dict[str, str]]] = None
+ question: str,
+ items: List[str],
+ mapping_keys: List[str],
+ selected_columns: List[str],
+ context: str,
+ category_summary: str,
+ chat_history: Optional[List[Dict[str, str]]] = None
 ) -> str:
-    """Build prompt for location-wise analysis using the new persona."""
-    return _build_generic_prompt(
-        question, items, mapping_keys, selected_columns, context, category_summary, "Location", chat_history
-    )
+ return _build_generic_prompt(
+     question=question,
+     items=items,
+     mapping_keys=mapping_keys,
+     selected_columns=selected_columns,
+     context=context,
+     category_summary=category_summary,
+     comparison_type="Location",
+     chat_history=chat_history
+ )
 
 
 def build_city_prompt(
-    question: str,
-    items: List[str],
-    mapping_keys: List[str],
-    selected_columns: List[str],
-    context: str,
-    category_summary: str,
-    chat_history: Optional[List[Dict[str, str]]] = None
+ question: str,
+ items: List[str],
+ mapping_keys: List[str],
+ selected_columns: List[str],
+ context: str,
+ category_summary: str,
+ chat_history: Optional[List[Dict[str, str]]] = None
 ) -> str:
-    """Build prompt for city-wise analysis using the new persona."""
-    return _build_generic_prompt(
-        question, items, mapping_keys, selected_columns, context, category_summary, "City", chat_history
-    )
+ return _build_generic_prompt(
+     question=question,
+     items=items,
+     mapping_keys=mapping_keys,
+     selected_columns=selected_columns,
+     context=context,
+     category_summary=category_summary,
+     comparison_type="City",
+     chat_history=chat_history
+ )
 
 
 def build_project_prompt(
-    question: str,
-    items: List[str],
-    mapping_keys: List[str],
-    selected_columns: List[str],
-    context: str,
-    category_summary: str,
-    chat_history: Optional[List[Dict[str, str]]] = None
+ question: str,
+ items: List[str],
+ mapping_keys: List[str],
+ selected_columns: List[str],
+ context: str,
+ category_summary: str,
+ chat_history: Optional[List[Dict[str, str]]] = None
 ) -> str:
-    """Build prompt for project-wise analysis using the new persona."""
-    return _build_generic_prompt(
-        question, items, mapping_keys, selected_columns, context, category_summary, "Project", chat_history
-    )
+ return _build_generic_prompt(
+     question=question,
+     items=items,
+     mapping_keys=mapping_keys,
+     selected_columns=selected_columns,
+     context=context,
+     category_summary=category_summary,
+     comparison_type="Project",
+     chat_history=chat_history
+ )
