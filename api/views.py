@@ -23,6 +23,7 @@ from core.agents import planner_identify_mapping_keys, agent_pick_relevant_colum
 from core.graph_agent import create_graph
 from core.prompts import build_location_prompt, build_city_prompt, build_project_prompt
 from langchain_core.messages import HumanMessage, AIMessage
+from core.time_estimate import estimate_processing_time
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +90,36 @@ class GetComparisonItemsView(APIView):
         except Exception as e:
             logger.error(f"Error getting comparison items: {e}")
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class GetCategoriesView(APIView):
+    """Get available categories for a comparison type"""
+    
+    def post(self, request):
+        serializer = GetCategoriesRequestSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        comparison_type = serializer.validated_data['comparison_type']
+        
+        try:
+            # Get category mapping for the comparison type
+            category_mapping = get_category_mapping(comparison_type)
+            
+            # Extract unique categories (keys from the mapping)
+            categories = list(category_mapping.keys())
+            
+            response_data = {
+                'categories': categories,
+                'comparison_type': comparison_type
+            }
+            response_serializer = GetCategoriesResponseSerializer(response_data)
+            return Response(response_serializer.data, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.error(f"Error getting categories: {e}")
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 
 @method_decorator(csrf_exempt, name='dispatch')
@@ -454,6 +485,7 @@ class MainQueryView(APIView):
         response_llm_provider = serializer.validated_data.get('response_llm_provider', 'openai')
         bypass_mapping = serializer.validated_data.get('bypass_mapping', False)
         years = serializer.validated_data.get('years') or [2020, 2021, 2022, 2023, 2024]
+        categories = serializer.validated_data.get('categories', []) or []
         
         # Create a configuration hash to detect changes
         config_payload = {
@@ -483,6 +515,16 @@ class MainQueryView(APIView):
         chat_history = request.session.get('chat_history', [])
         
         try:
+            # Calculate estimated time BEFORE processing
+            estimated_time = estimate_processing_time(
+                query=query,
+                items=items,
+                categories=categories,
+                years=years,
+                comparison_type=comparison_type
+            )
+            logger.info(f"Estimated processing time: {estimated_time} seconds")
+            
             # Get LLM and Graph App
             llm = get_llm(response_llm_provider)
             app = get_graph_app()
@@ -494,6 +536,7 @@ class MainQueryView(APIView):
                 "comparison_type": comparison_type,
                 "llm": llm,
                 "years": years,
+                "categories": categories,  # Pass selected categories for filtering
                 "chat_history": chat_history,
                 "detected_requirements": [],
                 "candidate_keys": [],
@@ -528,6 +571,7 @@ class MainQueryView(APIView):
                 'input_tokens': final_state.get('input_tokens', 0),
                 'output_tokens': final_state.get('output_tokens', 0),
                 'cached': False,
+                'estimated_time_seconds': estimated_time,  # Include estimated time
                 'session_id': request.session.session_key
             }
             

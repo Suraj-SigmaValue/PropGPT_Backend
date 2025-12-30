@@ -9,6 +9,17 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# LangSmith Tracing Configuration
+# This enables comprehensive tracing of all LangChain operations
+os.environ["LANGCHAIN_TRACING_V2"] = os.getenv("LANGCHAIN_TRACING_V2", "true")
+os.environ["LANGCHAIN_ENDPOINT"] = os.getenv("LANGCHAIN_ENDPOINT", "https://api.smith.langchain.com")
+os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGCHAIN_API_KEY", "")
+os.environ["LANGCHAIN_PROJECT"] = os.getenv("LANGCHAIN_PROJECT", "PropGPT-v3")
+
+# Optional: LangSmith Workspace ID (for team collaboration)
+if os.getenv("LANGSMITH_WORKSPACE_ID"):
+    os.environ["LANGSMITH_WORKSPACE_ID"] = os.getenv("LANGSMITH_WORKSPACE_ID")
+
 # Build paths inside the project
 BASE_DIR = Path(__file__).resolve().parent.parent
 

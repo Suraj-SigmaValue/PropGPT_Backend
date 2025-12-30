@@ -323,7 +323,56 @@ def load_and_clean_data(excel_path, pickle_path, comparison_type, items=None, ye
         return None, None, None
 
 
+
+def format_inr(value):
+    """
+    Format value to INR currency (Cr/Lakh) string if relevant.
+    Example: 12345678 -> ₹1.23 Cr
+    """
+    try:
+        val = float(value)
+    except (ValueError, TypeError):
+        return value
+        
+    if val == 0:
+        return "0"
+
+    abs_val = abs(val)
+    if abs_val >= 10000000: # 1 Cr
+        return f"₹{val/10000000:.2f} Cr"
+    elif abs_val >= 100000: # 1 Lakh
+        return f"₹{val/100000:.2f} L"
+    else:
+        return f"₹{val:,.0f}"
+
+def is_currency_col(col_name: str) -> bool:
+    c = col_name.lower()
+    if "inr" in c or "price" in c:
+        return True
+    if ("sales" in c or "amount" in c) and "unit" not in c and "area" not in c and "sqft" not in c:
+        return True
+    return False
+
 def create_documents(df, item_ids: List[str], defaults, columns_by_key: Dict[str, List[str]], years: List[int] = None, comparison_type: str = "Location", id_col: str = "final location"):
+    """
+    Create LangChain documents from dataframe for RAG retrieval.
+    
+    CRITICAL: This function enforces year filtering at the data layer.
+    Only data for the specified years will be included in the generated documents.
+    This ensures that the LLM only sees and can output data for selected years.
+    
+    Args:
+        df: Source dataframe
+        item_ids: List of items (locations/cities/projects) to include
+        defaults: Default values for missing data
+        columns_by_key: Mapping of keys to column names
+        years: List of years to include (ONLY these years will appear in output)
+        comparison_type: Type of comparison (Location/City/Project)
+        id_col: Column name for item identification
+        
+    Returns:
+        List of Document objects containing ONLY selected years' data
+    """
     if years is None:
         years = [2020, 2021, 2022, 2023, 2024]
 
@@ -353,10 +402,15 @@ def create_documents(df, item_ids: List[str], defaults, columns_by_key: Dict[str
                             value = item_df.iloc[0][col]
                         except Exception:
                             value = item_df[col].iloc[0]
+                    
+                    if is_currency_col(col):
+                        value = format_inr(value)
+                        
                     content_lines.append(f"{item_id}_{mapping_key}_{col}: {value}")
             else:
                 for col in valid_cols:
                     year_values = []
+                    # CRITICAL: Loop ONLY through selected years - this enforces year filtering at data layer
                     for year in years:
                         year_df = item_df[item_df["year"] == year] if not item_df.empty else pd.DataFrame()
                         
@@ -379,6 +433,11 @@ def create_documents(df, item_ids: List[str], defaults, columns_by_key: Dict[str
                                     val = f"{parsed}" 
                             except:
                                 pass # Keep original string if parse fails
+
+
+                        
+                        if is_currency_col(col):
+                            val = format_inr(val)
 
                         year_values.append(f"{year}:{val}")
                     content_lines.append(f"{item_id}_{mapping_key}_{col}: {', '.join(year_values)}")

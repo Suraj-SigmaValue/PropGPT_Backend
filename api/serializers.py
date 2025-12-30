@@ -33,6 +33,7 @@ class QueryResponseSerializer(serializers.Serializer):
     output_tokens = serializers.IntegerField()
     cached = serializers.BooleanField()
     cache_metadata = serializers.DictField(required=False)
+    estimated_time_seconds = serializers.IntegerField(required=False)  # Estimated processing time
 
 
 class MappingKeysRequestSerializer(serializers.Serializer):
@@ -170,3 +171,15 @@ class ProjectRecommendationsResponseSerializer(serializers.Serializer):
     """Response with project recommendations"""
     recommendations = ProjectRecommendationSerializer(many=True)
     count = serializers.IntegerField()
+
+
+class GetCategoriesRequestSerializer(serializers.Serializer):
+    """Request to get available categories for a comparison type"""
+    comparison_type = serializers.CharField(required=True)
+
+
+class GetCategoriesResponseSerializer(serializers.Serializer):
+    """Response with available categories"""
+    categories = serializers.ListField(child=serializers.CharField())
+    comparison_type = serializers.CharField()
+

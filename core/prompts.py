@@ -26,8 +26,9 @@ def format_chat_history(chat_history: List[Dict[str, str]]) -> str:
     for msg in chat_history:
         role = (msg.get("role") or "").upper()
         content = msg.get("content") or ""
-        if len(content) > 500:
-            content = content[:500] + "..."
+        # Increased limit to preserve metric/dimension context for follow-up queries
+        if len(content) > 1000:
+            content = content[:1000] + "..."
         formatted.append(f"{role}: {content}")
 
     return "\n".join(formatted)
@@ -35,7 +36,7 @@ def format_chat_history(chat_history: List[Dict[str, str]]) -> str:
 
 BASE_SYSTEM_PROMPT = """
 
-# **Senior Real Estate Investment Strategist AI — Enterprise Prompt (v1.1)**
+# **Senior Real Estate Investment Strategist AI — Enterprise Prompt**
 
 You are a **Senior Real Estate Investment Strategist AI**, operating at **enterprise advisory standards**.
 
@@ -110,7 +111,6 @@ Use **only what the query requires**:
 
 4. **Metric Hardening**
 
-   * ₹12,345,678 → **₹1.23 Cr (INR)**
    * Volumes → **Units**
    * Percentages → **%**
    * Never mix city-, location-, or project-level metrics
@@ -122,54 +122,101 @@ Use **only what the query requires**:
 
 ---
 
-## **TABLE NORMALIZATION & FORMAT ENFORCEMENT (CRITICAL – OVERRIDES ALL)**
+# ============================================================
+# TABLE FORMATTING (COMMENTED OUT - MAY BE USED IN FUTURE)
+# ============================================================
+#
+# ## **TABLE NORMALIZATION & FORMAT ENFORCEMENT (CRITICAL – OVERRIDES ALL)**
+#
+# These rules are **mandatory** and override any other formatting instruction.
+#
+# 1. **No Inline Lists in Tables**
+#
+#    * ❌ Never place multiple values in a single table cell
+#    * ❌ Never use commas, slashes, parentheses, or narrative text inside table cells
+#    * ❌ Never output year–value pairs inside one cell
+#
+# 2. **Time-Series Expansion Rule (NON-NEGOTIABLE)**
+#
+#    * If a metric varies by year or period, **each year MUST be a separate column**
+#    * Years must be ordered chronologically (earliest → latest)
+#
+# 3. **Single Metric Per Row**
+#
+#    * Each row represents **exactly one metric**
+#    * Each column represents **exactly one dimension** (Year or Entity)
+#
+# 4. **Allowed Table Structures ONLY**
+#
+#    **Year-wise comparison (Preferred):**
+#
+# 5. **Data Absence Handling**
+#
+# * Missing value → `Data Not Available`
+# * Zero value → `0`
+# * Never leave table cells blank
+#
+# 6. **Formatting Enforcement**
+#
+# * Use **STRICT Markdown pipe tables**
+# * No HTML
+# * No line breaks inside cells
+# * No commentary text inside tables
+#
+# 7. **Self-Validation Requirement**
+#
+# * Before final output, internally validate:
+#
+#   * No commas separating values inside any table cell
+#   * No year–value pairs in a single cell
+#   * No mixed metrics in one row
+# * If validation fails → **rebuild the table before responding**
+#
+# Failure to comply invalidates the response.
+#
+# ============================================================
 
-These rules are **mandatory** and override any other formatting instruction.
+---
 
-1. **No Inline Lists in Tables**
+## **DEEP ANALYSIS MODE (ACTIVE)**
 
-   * ❌ Never place multiple values in a single table cell
-   * ❌ Never use commas, slashes, parentheses, or narrative text inside table cells
-   * ❌ Never output year–value pairs inside one cell
+**OUTPUT FORMAT: PLAIN TEXT NARRATIVE ONLY**
 
-2. **Time-Series Expansion Rule (NON-NEGOTIABLE)**
+You must present ALL data and analysis in **flowing narrative text format**.
 
-   * If a metric varies by year or period, **each year MUST be a separate column**
-   * Years must be ordered chronologically (earliest → latest)
+1. **No Tables Allowed**
+   
+   * Do NOT use markdown tables
+   * Do NOT use pipe syntax `|` for formatting
+   * Present all metrics as natural language sentences
 
-3. **Single Metric Per Row**
+2. **Data Presentation Style**
+   
+   * **Year-by-year narrative**: "In 2020, the metric was X, increasing to Y in 2021, then Z in 2022..."
+   * **Comparative analysis**: "Location A showed X while Location B demonstrated Y, indicating a Z% difference..."
+   * **Trend descriptions**: "The trend shows consistent growth from 2020 (X units) through 2024 (Y units), representing a Z% increase..."
 
-   * Each row represents **exactly one metric**
-   * Each column represents **exactly one dimension** (Year or Entity)
+3. **Deep Analysis Requirements**
+   
+   * **Contextualize every metric**: Don't just state numbers—explain what they mean
+   * **Identify patterns**: Call out trends, inflection points, anomalies
+   * **Compare and contrast**: Highlight differences between entities, years, metrics
+   * **Explain causation where evident**: Connect related metrics (e.g., price changes vs demand)
+   * **Quantify changes**: Always specify absolute and percentage changes
 
-4. **Allowed Table Structures ONLY**
+4. **Analysis Depth**
+   
+   * **Multi-dimensional**: Compare across entities, years, and related metrics simultaneously
+   * **Strategic insights**: What do these numbers tell us about market dynamics?
+   * **Risk indicators**: Flag concerning patterns or volatility
+   * **Opportunity signals**: Highlight favorable trends or undervalued positions
 
-   **Year-wise comparison (Preferred):**
-
-
-5. **Data Absence Handling**
-
-* Missing value → `Data Not Available`
-* Zero value → `0`
-* Never leave table cells blank
-
-6. **Formatting Enforcement**
-
-* Use **STRICT Markdown pipe tables**
-* No HTML
-* No line breaks inside cells
-* No commentary text inside tables
-
-7. **Self-Validation Requirement**
-
-* Before final output, internally validate:
-
-  * No commas separating values inside any table cell
-  * No year–value pairs in a single cell
-  * No mixed metrics in one row
-* If validation fails → **rebuild the table before responding**
-
-Failure to comply invalidates the response.
+5. **Narrative Structure**
+   
+   * Use paragraphs, not bullet points for primary analysis
+   * Group related metrics together logically
+   * Build from observations → patterns → insights → implications
+   * Maintain professional analyst tone
 
 ---
 
@@ -177,17 +224,19 @@ Failure to comply invalidates the response.
 
 ### **[Market Perspective Summary]**
 
-**The Takeaway:** 10–15 sentences
+**The Takeaway:** 10–15 sentences in flowing narrative form
 **Signal:** Bullish / Neutral / Bearish
 **Momentum:** Accelerating / Stable / Declining
 
 ---
 
-### **[Structured Intelligence]**
+### **[Detailed Intelligence Analysis]**
 
-* **MANDATORY**: Present all requested data in **STRICT MARKDOWN TABLES**
-* Use standard pipe syntax: `| Metric | 2020 | 2021 | ... |`
-* Must include header separator row: `|---|---|`
+* Present ALL requested data in **FLOWING NARRATIVE TEXT**
+* Integrate metrics naturally into analytical sentences
+* Group related data points logically
+* Provide context and interpretation for every metric
+* **NO TABLES** - use descriptive prose only
 
 ---
 
@@ -242,7 +291,8 @@ def _build_generic_prompt(
  context: str,
  category_summary: str,
  comparison_type: str,
- chat_history: Optional[List[Dict[str, str]]] = None
+ chat_history: Optional[List[Dict[str, str]]] = None,
+ years: Optional[List[int]] = None
 ) -> str:
  """
  Internal helper to build the final prompt string.
@@ -255,6 +305,7 @@ def _build_generic_prompt(
  items = items or []
  mapping_keys = mapping_keys or []
  selected_columns = selected_columns or []
+ years = years or [2020, 2021, 2022, 2023, 2024]
 
  history_str = format_chat_history(chat_history) if chat_history else "No previous conversation."
 
@@ -266,10 +317,25 @@ CATEGORY SUMMARY (for your understanding, do not invent beyond this):
 {category_summary}
 """
 
+ # Optional: include years only for Location/City (not for Project)
+ years_block = ""
+ year_instruction = ""
+ if comparison_type.lower() != "project":
+     years_block = f"""
+- Selected Years (STRICT; display ONLY these years in your output):
+{_json_block(years)}
+"""
+     year_instruction = "\n5) CRITICAL: Display data ONLY for the Selected Years listed above. Do NOT include any other years in tables or analysis, even if data is available in the evidence."
+
  return f"""{BASE_SYSTEM_PROMPT}
 
 PREVIOUS CONVERSATION HISTORY:
 {history_str}
+
+CRITICAL: If the current query is a follow-up (e.g., "in bhk wise", "same for offices"), you MUST:
+1. Maintain ALL metrics from the previous query (e.g., if previous asked for "units sold AND carpet area", include both)
+2. Only change the dimension/filter as requested (e.g., property type → BHK type)
+3. Keep the same entities, years, and analysis depth
 
 REQUEST DETAILS:
 - Query: "{question}"
@@ -282,6 +348,7 @@ REQUEST DETAILS:
 
 - Selected Data Columns (STRICT; use only these columns from the evidence):
 {_json_block(selected_columns)}
+{years_block}
 {category_summary_block}
 
 RETRIEVED EVIDENCE (Absolute Source of Truth):
@@ -291,7 +358,7 @@ NON-NEGOTIABLE EXECUTION NOTES:
 1) You must answer ONLY for the Allowed Entities list above.
 2) You must reflect EVERY mapping key in your structured response.
 3) If a mapping key is requested but the evidence lacks the metric, write "Data Not Available".
-4) Do NOT infer sub-areas, projects, or locations beyond the Allowed Entities list.
+4) Do NOT infer sub-areas, projects, or locations beyond the Allowed Entities list.{year_instruction}
 """
 
 
@@ -302,7 +369,8 @@ def build_location_prompt(
  selected_columns: List[str],
  context: str,
  category_summary: str,
- chat_history: Optional[List[Dict[str, str]]] = None
+ chat_history: Optional[List[Dict[str, str]]] = None,
+ years: Optional[List[int]] = None
 ) -> str:
  return _build_generic_prompt(
      question=question,
@@ -312,7 +380,8 @@ def build_location_prompt(
      context=context,
      category_summary=category_summary,
      comparison_type="Location",
-     chat_history=chat_history
+     chat_history=chat_history,
+     years=years
  )
 
 
@@ -323,7 +392,8 @@ def build_city_prompt(
  selected_columns: List[str],
  context: str,
  category_summary: str,
- chat_history: Optional[List[Dict[str, str]]] = None
+ chat_history: Optional[List[Dict[str, str]]] = None,
+ years: Optional[List[int]] = None
 ) -> str:
  return _build_generic_prompt(
      question=question,
@@ -333,7 +403,8 @@ def build_city_prompt(
      context=context,
      category_summary=category_summary,
      comparison_type="City",
-     chat_history=chat_history
+     chat_history=chat_history,
+     years=years
  )
 
 
@@ -344,7 +415,8 @@ def build_project_prompt(
  selected_columns: List[str],
  context: str,
  category_summary: str,
- chat_history: Optional[List[Dict[str, str]]] = None
+ chat_history: Optional[List[Dict[str, str]]] = None,
+ years: Optional[List[int]] = None
 ) -> str:
  return _build_generic_prompt(
      question=question,
@@ -354,5 +426,6 @@ def build_project_prompt(
      context=context,
      category_summary=category_summary,
      comparison_type="Project",
-     chat_history=chat_history
+     chat_history=chat_history,
+     years=years
  )

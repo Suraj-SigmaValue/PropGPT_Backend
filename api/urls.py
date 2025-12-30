@@ -15,6 +15,7 @@ urlpatterns = [
     # Data Management
     path('mappings/load/', LoadMappingsView.as_view(), name='load_mappings'),
     path('items/', GetComparisonItemsView.as_view(), name='comparison_items'),
+    path('categories/', GetCategoriesView.as_view(), name='get_categories'),
     path('projects/recommendations/', ProjectRecommendationsView.as_view(), name='project_recommendations'),
     
     # Agent Endpoints

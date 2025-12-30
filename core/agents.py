@@ -40,6 +40,10 @@ _WORD_RE = re.compile(r"[a-z0-9]+", re.IGNORECASE)
 def _norm(s: str) -> str:
     return (s or "").strip().lower()
 
+def _norm_col(s: str) -> str:
+    # Normalize column name to match DF (remove hyphens, extra spaces)
+    return re.sub(r'[-\s]+', ' ', (s or "").strip().lower())
+
 def _tokens(s: str) -> List[str]:
     return _WORD_RE.findall(_norm(s))
 
@@ -311,6 +315,27 @@ def planner_identify_mapping_keys(
 
     scored.sort(reverse=True, key=lambda x: x[0])
     deterministic = [k for _, k in scored[:max_keys]]
+    
+    # Feature: Restrict DA Keys unless query is explicitly about Launch/DA
+    da_triggers = ["launch", "new project", "upcoming", "pre-launch", "under construction", "development agreement", "da ", "(da)"]
+    is_launch_query = any(t in query.lower() for t in da_triggers) or "da" in _tokens(query.lower())
+    
+    filtered_deterministic = []
+    for k in deterministic:
+        k_lower = k.lower()
+        is_da_key = "development agreement" in k_lower or "(da)" in k_lower or "developement agreement" in k_lower
+        
+        if is_da_key and not is_launch_query:
+            # Skip this key if query is not launch related
+            continue
+        filtered_deterministic.append(k)
+        
+    deterministic = filtered_deterministic
+
+    # Property hierarchy logic removed as per user request to allow semantic matching to prevail
+
+
+
 
     # Optional LLM rerank ONLY among top shortlist (keeps it stable + accurate)
     if not llm or not use_llm_rerank or len(deterministic) <= 1:
@@ -318,9 +343,13 @@ def planner_identify_mapping_keys(
 
     try:
         sys_instr = (
-            "You are a mapping-key selector. Choose the best keys to answer the user query. "
-            "Return ONLY a JSON array of keys chosen from SHORTLIST. No extra text."
-        )
+            "You are a mapping-key selector. Choose the best keys to answer the user query. ",
+            "Return ONLY a JSON array of keys chosen from SHORTLIST. No extra text.",
+            "If User Ask for range related analysis, we will boost the keys that look like ranges",
+            "User Did not Specify Property Type, then give Priority 1st to broad type (Residential+ Commercial) Priority 2nd to Property Keys (if 'flat', 'office', 'shop' mentioned) and Priority 3rd to BHK wise"
+
+            
+        )   
         prompt = f"""
 User Query:
 {query}
@@ -376,8 +405,15 @@ def agent_pick_relevant_columns(
     if mapping_dict:
         for k in selected_keys:
             cols = mapping_dict.get(k, []) or []
-            # keep only those actually present
-            present = [c for c in cols if c in cand_set]
+            # keep only those actually present (using normalization check)
+            present = []
+            for c in cols:
+                cn = _norm_col(c)
+                if cn in cand_set:
+                    present.append(cn)
+                elif c in cand_set:
+                    present.append(c)
+
             # ensure at least one per key if available
             if present:
                 # keep the most "descriptive": longest column name first (heuristic, key-agnostic)
@@ -418,8 +454,11 @@ def agent_pick_relevant_columns(
 
     try:
         sys_instr = (
-            "You select strictly relevant dataframe column names for the query. "
-            "Return ONLY a JSON list of exact column names from SHORTLIST. No extra text."
+            "You are a helpful data column selector. "
+            "Select ALL columns from the SHORTLIST that could be useful for the user query and the selected mapping keys. "
+            "Do NOT be restrictive. If a column looks relevant, include it. "
+            "Prioritize columns that match the intent of the selected mapping keys."
+            "Return ONLY a JSON list of exact column names."
         )
         prompt = f"""
 User Query:
@@ -428,12 +467,12 @@ User Query:
 Selected mapping keys (context):
 {json.dumps(selected_keys, indent=2)}
 
-SHORTLIST columns (pick what is needed, keep it small):
+SHORTLIST columns:
 {json.dumps(chosen, indent=2)}
 
 Rules:
 - Output ONLY a JSON list.
-- Keep only columns needed to answer the query.
+- Select broadly: Include only those columns that are relevernt and can help answer the query.
 """
         resp = llm.invoke(sys_instr + "\n\n" + prompt)
         raw = getattr(resp, "content", None) or str(resp)
@@ -487,6 +526,8 @@ def agent_correction_mapping(
         sys_instr = (
             "You are a correction assistant for mapping keys. The previous keys were rejected. "
             "Choose a better set from SHORTLIST. Return ONLY a JSON list."
+            "IMPORTANT: Please utilize mapping 100% and select most relevant columns from the mapping key."
+
         )
         prompt = f"""
 User query:
@@ -513,47 +554,3 @@ Output: JSON list only.
         return shortlist[:max_keys]
 
 
-# -----------------------------
-# Validation
-# -----------------------------
-def validate_selected_columns(
-    query: str,
-    selected_keys: List[str],
-    selected_columns: List[str],
-    mapping_dict: Optional[Dict[str, List[str]]] = None
-) -> Dict[str, Any]:
-    """
-    Validation without hardcoding key names:
-    - Keys must exist
-    - Columns must exist
-    - If mapping_dict provided: each selected key should have at least one mapped column present (best-effort)
-    """
-    errors: List[str] = []
-    warnings: List[str] = []
-    suggestions: List[str] = []
-
-    if not selected_keys:
-        errors.append("No mapping keys selected.")
-    if not selected_columns:
-        errors.append("No columns selected.")
-
-    if mapping_dict and selected_keys and selected_columns:
-        col_set = set(selected_columns)
-        missing_cover = []
-        for k in selected_keys:
-            mapped = mapping_dict.get(k, []) or []
-            # if none of the mapped columns appear, it might be a mismatch between mapping_dict vs df columns
-            if mapped and not any(c in col_set for c in mapped):
-                missing_cover.append(k)
-        if missing_cover:
-            warnings.append("Some selected keys have no mapped columns present in selected_columns.")
-            suggestions.append(f"Check DF column availability or mapping_dict for keys: {missing_cover}")
-
-    return {
-        "is_valid": len(errors) == 0,
-        "errors": errors,
-        "warnings": warnings,
-        "suggestions": suggestions,
-        "query_categories": {}
-    }
-    

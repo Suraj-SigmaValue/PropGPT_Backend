@@ -51,6 +51,7 @@ class AgentState(TypedDict):
     comparison_type: str
     llm: Any
     years: List[int]
+    categories: List[str]  # User-selected categories for filtering
     chat_history: List[Dict[str, str]]
 
     detected_requirements: List[str]
@@ -131,12 +132,34 @@ def smart_filter_node(state: AgentState) -> Dict[str, Any]:
         llm = get_llm()
 
     # Get the mapping dict for this comparison type (needed by new agents.py)
-    # Get the mapping dict for this comparison type (needed by new agents.py)
     from .core_utils import COLUMN_MAPPING, CATEGORY_MAPPING
     mapping_dict = COLUMN_MAPPING if COLUMN_MAPPING else {}
     category_mapping = CATEGORY_MAPPING if CATEGORY_MAPPING else {}
 
-    candidate_keys = list(mapping_dict.keys())
+    # CRITICAL: Filter candidate_keys by selected categories
+    selected_categories = state.get("categories", []) or []
+    
+    if selected_categories:
+        # Filter keys: only include keys that belong to selected categories
+        filtered_keys = []
+        for category in selected_categories:
+            category_keys = category_mapping.get(category, [])
+            filtered_keys.extend(category_keys)
+        
+        # Remove duplicates while preserving order
+        seen = set()
+        candidate_keys = []
+        for key in filtered_keys:
+            if key not in seen and key in mapping_dict:
+                seen.add(key)
+                candidate_keys.append(key)
+        
+        logger.info(f"Category filtering: {len(filtered_keys)} keys from categories {selected_categories} -> {len(candidate_keys)} unique valid keys")
+    else:
+        # No category filter: use all keys
+        candidate_keys = list(mapping_dict.keys())
+        logger.info("No category filter applied - using all available keys")
+
     relevant_candidates = candidate_keys
 
 
@@ -261,22 +284,119 @@ def retrieval_node(state: AgentState) -> Dict[str, Any]:
 
 
 def check_relevance_node(state: AgentState) -> Dict[str, Any]:
-    logger.info("--- Node: Check Relevance ---")
+    """
+    Enhanced relevance check using LLM to validate:
+    1. Selected mapping keys are relevant to user query
+    2. All parts of multi-question queries are covered
+    3. Retrieved data sources align with query intent
+    """
+    logger.info("--- Node: Check Relevance (LLM-Enhanced) ---")
 
+    query = state.get("query", "") or ""
     context = (state.get("context_text", "") or "").strip()
     docs = state.get("context_docs", []) or []
+    selected_keys = state.get("selected_keys", []) or []
+    selected_columns = state.get("selected_columns", []) or []
     iteration = int(state.get("iteration_count", 0))
+    llm = state.get("llm")
 
-    passed = False
+    # Fallback: Basic heuristic check (no LLM)
+    basic_passed = False
     if len(context) >= 250 and len(docs) >= 1:
-        passed = True
+        basic_passed = True
+    
+    # Force pass after max iterations to prevent infinite loops
     if iteration >= 3:
-        passed = True
+        logger.warning("Max iterations reached (3) - forcing relevance pass")
+        return {"relevance_passed": True}
 
-    logger.info("Relevance passed: %s (context_len=%s, docs=%s, iteration=%s)",
-                passed, len(context), len(docs), iteration)
+    # If no LLM available, use basic heuristic
+    if not llm:
+        logger.info("No LLM available - using basic heuristic: %s", basic_passed)
+        return {"relevance_passed": basic_passed}
 
-    return {"relevance_passed": passed}
+    # LLM-based intelligent relevance check
+    try:
+        validation_prompt = f"""You are a data validation expert. Analyze if the selected mapping keys and data sources are sufficient to answer the user's query.
+
+USER QUERY:
+"{query}"
+
+SELECTED MAPPING KEYS:
+{selected_keys}
+
+SELECTED DATA COLUMNS:
+{selected_columns[:15]}  # First 15 to avoid token overflow
+
+RETRIEVED DATA PREVIEW:
+{context[:500]}  # First 500 chars as sample
+
+TASK:
+1. Identify ALL distinct questions/requests in the user query (e.g., "give me sales AND demographic analysis" = 2 questions)
+2. For EACH question, check if there are mapping keys that can answer it
+3. Determine if the retrieved data covers all questions
+
+Respond in this EXACT JSON format (no markdown, just JSON):
+{{
+  "questions_identified": ["question 1", "question 2", ...],
+  "coverage_analysis": {{
+    "question 1": {{"covered": true/false, "missing_keys": ["key if missing"]}},
+    "question 2": {{"covered": true/false, "missing_keys": ["key if missing"]}}
+  }},
+  "all_questions_covered": true/false,
+  "overall_relevance": true/false,
+  "reason": "brief explanation"
+}}
+
+Be strict: if ANY question lacks appropriate mapping keys, set all_questions_covered=false.
+"""
+
+        response = llm.invoke(validation_prompt)
+        response_text = response.content if hasattr(response, 'content') else str(response)
+        
+        # Parse LLM response
+        import json
+        import re
+        
+        # Extract JSON from response (handle markdown code blocks)
+        json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+        if json_match:
+            validation_result = json.loads(json_match.group(0))
+        else:
+            raise ValueError("No JSON found in LLM response")
+        
+        all_covered = validation_result.get("all_questions_covered", False)
+        overall_relevant = validation_result.get("overall_relevance", False)
+        reason = validation_result.get("reason", "No reason provided")
+        
+        # Log detailed results
+        logger.info("LLM Validation Results:")
+        logger.info("  Questions identified: %s", validation_result.get("questions_identified", []))
+        logger.info("  All questions covered: %s", all_covered)
+        logger.info("  Overall relevance: %s", overall_relevant)
+        logger.info("  Reason: %s", reason)
+        
+        # Detailed coverage logging
+        coverage = validation_result.get("coverage_analysis", {})
+        for question, analysis in coverage.items():
+            if not analysis.get("covered", False):
+                logger.warning("  ❌ NOT COVERED: '%s' - Missing keys: %s", 
+                             question, analysis.get("missing_keys", []))
+            else:
+                logger.info("  ✓ COVERED: '%s'", question)
+        
+        # Decision: pass only if all questions are covered
+        passed = all_covered and overall_relevant
+        
+        logger.info("Relevance check decision: %s (iteration %s)", 
+                   "PASS" if passed else "FAIL - will refine", iteration)
+        
+        return {"relevance_passed": passed}
+        
+    except Exception as e:
+        logger.error("LLM validation failed: %s - falling back to basic heuristic", e)
+        # Fallback to basic check if LLM fails
+        return {"relevance_passed": basic_passed}
 
 
 def generate_response_node(state: AgentState) -> Dict[str, Any]:
@@ -295,6 +415,7 @@ def generate_response_node(state: AgentState) -> Dict[str, Any]:
     comparison_type = (state.get("comparison_type", "Location") or "Location").lower()
     chat_history = state.get("chat_history", []) or []
     detected_requirements = state.get("detected_requirements", []) or []
+    years = state.get("years", [2020, 2021, 2022, 2023, 2024]) or [2020, 2021, 2022, 2023, 2024]
 
     if comparison_type == "location":
         prompt_func = build_location_prompt
@@ -311,6 +432,7 @@ def generate_response_node(state: AgentState) -> Dict[str, Any]:
         context=context,
         category_summary=", ".join(detected_requirements),
         chat_history=chat_history,
+        years=years,
     )
 
     llm_response = llm.invoke(formatted_prompt)
