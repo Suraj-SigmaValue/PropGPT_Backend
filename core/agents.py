@@ -346,7 +346,7 @@ def planner_identify_mapping_keys(
             "You are a mapping-key selector. Choose the best keys to answer the user query. ",
             "Return ONLY a JSON array of keys chosen from SHORTLIST. No extra text.",
             "If User Ask for range related analysis, we will boost the keys that look like ranges",
-            "User Did not Specify Property Type, then give Priority 1st to broad type (Residential+ Commercial) Priority 2nd to Property Keys (if 'flat', 'office', 'shop' mentioned) and Priority 3rd to BHK wise"
+            "if User Did not Specify Property Type, then give Priority 1st to broad type (Residential+ Commercial) Priority 2nd to Property Keys ('flat', 'office', 'shop') and Priority 3rd to BHK wise"
 
             
         )   
@@ -416,9 +416,9 @@ def agent_pick_relevant_columns(
 
             # ensure at least one per key if available
             if present:
-                # keep the most "descriptive": longest column name first (heuristic, key-agnostic)
-                present.sort(key=lambda x: len(x), reverse=True)
-                chosen.extend(present[: min(3, len(present))])  # cap per key to avoid bloat
+                # keep all columns for this key (up to 20) to ensure complete breakups (e.g., all BHKs)
+                # Do NOT sort by length; rely on mapping.py order or alphabetical if needed.
+                chosen.extend(present[: min(20, len(present))]) 
 
     chosen = list(dict.fromkeys(chosen))
 
@@ -454,9 +454,9 @@ def agent_pick_relevant_columns(
 
     try:
         sys_instr = (
-            "You are a helpful data column selector. "
-            "Select ALL columns from the SHORTLIST that could be useful for the user query and the selected mapping keys. "
-            "Do NOT be restrictive. If a column looks relevant, include it. "
+            "You are a helpful data column selector."
+            "Select relevernt columns from the SHORTLIST that could be useful for the user query and the selected mapping keys."
+            "Do NOT be restrictive. If a column looks relevant, include it."
             "Prioritize columns that match the intent of the selected mapping keys."
             "Return ONLY a JSON list of exact column names."
         )

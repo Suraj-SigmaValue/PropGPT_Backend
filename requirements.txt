@@ -23,3 +23,5 @@ python-Levenshtein
 numpy
 fuzzywuzzy
 ipykernel
+xhtml2pdf
+markdown

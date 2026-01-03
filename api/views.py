@@ -16,6 +16,10 @@ from datetime import datetime
 import joblib
 import re
 from hashlib import md5
+from django.http import HttpResponse
+from django.template import Template, Context
+from xhtml2pdf import pisa
+import markdown
 
 from .serializers import *
 from core.core_utils import *
@@ -553,6 +557,10 @@ class MainQueryView(APIView):
             
             cleaned_response = final_state.get('final_response', "I couldn't generate a response.")
             
+            # Appending contact link
+            contact_link = "\n\n[Please click here to contact our property expert](https://sigmavalue.in/contact/?page=contactform)"
+            cleaned_response += contact_link
+            
             # Update chat history
             chat_history.append({"role": "user", "content": query, "timestamp": datetime.now().isoformat()})
             chat_history.append({"role": "assistant", "content": cleaned_response, "timestamp": datetime.now().isoformat()})
@@ -582,3 +590,118 @@ class MainQueryView(APIView):
             logger.exception(f"Error in MainQueryView: {e}")
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
+@method_decorator(csrf_exempt, name='dispatch')
+class DownloadReportView(APIView):
+    """Download chat history as PDF"""
+    
+    def get(self, request):
+        chat_history = request.session.get('chat_history', [])
+        
+        if not chat_history:
+             # If no history, return simple message
+            return HttpResponse("No chat history available to download.", content_type='text/plain')
+
+        # Process chat history: Convert Markdown to HTML
+        processed_history = []
+        for msg in chat_history:
+            content = msg.get('content', '')
+            # Convert Markdown to HTML
+            # extensions=['extra'] enables tables, fenced code blocks, etc.
+            html_content = markdown.markdown(content, extensions=['extra', 'sane_lists'])
+            
+            processed_history.append({
+                'role': msg.get('role', 'unknown'),
+                'timestamp': msg.get('timestamp', ''),
+                'content': html_content  # Now safe HTML
+            })
+
+        # HTML Template with improved CSS for Markdown elements
+        html_string = """
+        <html>
+        <head>
+            <style>
+                @page { size: A4; margin: 2cm; }
+                body { font-family: Helvetica, sans-serif; font-size: 11px; line-height: 1.4; color: #333; }
+                
+                /* Layout */
+                .meta { color: #7f8c8d; font-size: 10px; margin-bottom: 20px; border-bottom: 1px solid #eee; padding-bottom: 10px; }
+                .message_block { margin-bottom: 25px; }
+                
+                /* Headers */
+                h1 { color: #2c3e50; font-size: 18px; border-bottom: 2px solid #2c3e50; padding-bottom: 5px; margin-bottom: 20px; }
+                h2 { color: #2980b9; font-size: 15px; margin-top: 15px; margin-bottom: 8px; font-weight: bold; }
+                h3 { color: #34495e; font-size: 13px; margin-top: 12px; margin-bottom: 6px; font-weight: bold; }
+                h4 { color: #555; font-size: 12px; margin-top: 10px; font-weight: bold; }
+                
+                /* Roles */
+                .role_user { color: #e67e22; font-weight: bold; font-size: 12px; margin-bottom: 5px; background-color: #fdf2e9; padding: 5px; border-radius: 4px; display: inline-block; }
+                .role_assistant { color: #27ae60; font-weight: bold; font-size: 12px; margin-bottom: 5px; background-color: #eafaf1; padding: 5px; border-radius: 4px; display: inline-block; }
+                .timestamp { float: right; color: #95a5a6; font-size: 9px; margin-top: 5px; }
+                
+                /* Content bodies */
+                .content { margin-top: 5px; text-align: justify; }
+                
+                /* Lists */
+                ul { margin: 5px 0 5px 20px; padding: 0; }
+                ol { margin: 5px 0 5px 20px; padding: 0; }
+                li { margin-bottom: 3px; }
+                
+                /* Text Formatting */
+                strong { font-weight: bold; color: #000; }
+                em { font-style: italic; }
+                p { margin-bottom: 10px; margin-top: 0; }
+                
+                /* Tables (if any) */
+                table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 10px; }
+                th { border: 1px solid #ddd; padding: 6px; background-color: #f2f2f2; font-weight: bold; text-align: left; }
+                td { border: 1px solid #ddd; padding: 6px; }
+                
+                /* Code blocks */
+                pre { background-color: #f8f8f8; border: 1px solid #ddd; padding: 10px; border-radius: 4px; white-space: pre-wrap; font-family: Courier, monospace; font-size: 10px; }
+                code { background-color: #f8f8f8; padding: 2px 4px; border-radius: 3px; font-family: Courier, monospace; }
+            </style>
+        </head>
+        <body>
+            <h1>PropGPT Session Report</h1>
+            <div class="meta">Generated on: {{ date }} | Session ID: {{ session_id }}</div>
+            
+            {% for msg in chat_history %}
+                <div class="message_block">
+                    <div>
+                        <span class="role_{{ msg.role }}">{{ msg.role|title }}</span>
+                        <span class="timestamp">{{ msg.timestamp }}</span>
+                    </div>
+                    <!-- 'safe' filter is required so Django doesn't escape the HTML tags we just generated -->
+                    <div class="content">{{ msg.content|safe }}</div>
+                </div>
+            {% endfor %}
+            
+            <div style="text-align: center; margin-top: 30px; border-top: 1px solid #eee; padding-top: 10px; color: #bdc3c7; font-size: 9px;">
+                Generated by PropGPT AI Assistant
+            </div>
+        </body>
+        </html>
+        """
+        
+        try:
+            template = Template(html_string)
+            context = Context({
+                'chat_history': processed_history,  # Use processed history
+                'date': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'session_id': request.session.session_key or "N/A"
+            })
+            html = template.render(context)
+            
+            response = HttpResponse(content_type='application/pdf')
+            response['Content-Disposition'] = 'attachment; filename="propgpt_chat_report.pdf"'
+            
+            pisa_status = pisa.CreatePDF(html, dest=response)
+            
+            if pisa_status.err:
+                return HttpResponse(f'PDF generation error: {pisa_status.err}', status=500)
+            return response
+            
+        except Exception as e:
+            logger.error(f"Error generating PDF: {e}")
+            return HttpResponse(f"Error generating PDF: {str(e)}", status=500)

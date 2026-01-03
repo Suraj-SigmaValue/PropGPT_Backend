@@ -35,4 +35,7 @@ urlpatterns = [
     
     # HITL Feedback
     path('feedback/', FeedbackView.as_view(), name='feedback'),
+    
+    # Reports
+    path('download-report/', DownloadReportView.as_view(), name='download_report'),
 ]
