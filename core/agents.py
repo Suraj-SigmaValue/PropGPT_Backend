@@ -343,13 +343,12 @@ def planner_identify_mapping_keys(
 
     try:
         sys_instr = (
-            "You are a mapping-key selector. Choose the best keys to answer the user query. ",
-            "Return ONLY a JSON array of keys chosen from SHORTLIST. No extra text.",
-            "If User Ask for range related analysis, we will boost the keys that look like ranges",
-            "if User Did not Specify Property Type, then give Priority 1st to broad type (Residential+ Commercial) Priority 2nd to Property Keys ('flat', 'office', 'shop') and Priority 3rd to BHK wise"
-
-            
-        )   
+            "You are a mapping-key selector. Choose the best keys to answer the user query. "
+            "Return ONLY a JSON array of keys chosen from SHORTLIST. No extra text. "
+            "If User Ask for range related analysis, we will boost the keys that look like ranges. "
+            "if User Did not Specify Property Type, then give Priority 1st to broad type (Residential+ Commercial) "
+            "Priority 2nd to Property Keys ('flat', 'office', 'shop') and Priority 3rd to BHK wise"
+        ) 
         prompt = f"""
 User Query:
 {query}

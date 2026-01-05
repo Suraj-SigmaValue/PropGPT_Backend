@@ -164,16 +164,17 @@ def smart_filter_node(state: AgentState) -> Dict[str, Any]:
 
 
     # CRITICAL FIX: Pass mapping_dict to enable proper column-aware scoring
+    # Reduced max_keys from 10 to 7 for tighter precision (Retrieval Strategy Fix)
     mapping_keys = planner_identify_mapping_keys(
         llm=llm,
         query=query,
         candidate_keys=relevant_candidates,
         mapping_dict=mapping_dict,
         category_mapping=category_mapping,
-        max_keys=10,
+        max_keys=7,
         use_llm_rerank=True
     )
-    mapping_keys = (mapping_keys or [])[:10]
+    mapping_keys = (mapping_keys or [])[:7]
 
     columns_by_key = get_columns_for_keys(mapping_keys)
     all_candidate_columns = flatten_columns(columns_by_key)

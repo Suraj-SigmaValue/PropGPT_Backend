@@ -601,10 +601,32 @@ def hybrid_retrieve(query: str, mapping_keys: List[str], vector_store: FAISS, bm
     # Updated for newer LangChain versions - use invoke() instead of get_relevant_documents()
     keyword_docs = bm25_retriever.invoke(query)[:top_k]
     
-    # Filter by mapping keys
+    # STRICTER mapping key filter to reduce false positives
     def matches_keys(doc):
-        doc_key = doc.metadata.get('mapping_key', '')
-        return any(key.lower() in doc_key.lower() or doc_key.lower() in key.lower() for key in mapping_keys)
+        doc_key = doc.metadata.get('mapping_key', '').lower().strip()
+        if not doc_key:
+            return False
+        
+        # Normalize mapping keys
+        normalized_keys = [key.lower().strip() for key in mapping_keys]
+        
+        for key in normalized_keys:
+            # Priority 1: Exact match
+            if doc_key == key:
+                return True
+            
+            # Priority 2: Doc key is a natural extension of the mapping key
+            # (e.g., "Most prevailing rate" matches "Most prevailing rate for DA")
+            if doc_key.startswith(key + " "):
+                return True
+            
+            # Priority 3: Reversed - mapping key is extension of doc key
+            if key.startswith(doc_key + " "):
+                return True
+        
+        # REMOVED: Loose substring matching (old logic: `key in doc_key or doc_key in key`)
+        # This was causing false positives like "BHK type" matching "Property type"
+        return False
     
     semantic_filtered = [d for d in semantic_docs if matches_keys(d)]
     keyword_filtered = [d for d in keyword_docs if matches_keys(d)]
