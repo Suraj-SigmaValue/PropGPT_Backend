@@ -716,6 +716,136 @@ CATEGORY_MAPPING_Location = {
     ],
 }
 
+SOURCE_MAPPING_Location = {
+
+    # --------------------
+    # ALL / COMMON (RERA)
+    # --------------------
+    "Location": "RERA",
+    "broad property types Share (%)": "RERA",
+    "Total Project Launched": "RERA",
+    "Total Phases Launched": "RERA",
+    "Total Buildings or Towers": "RERA",
+    "Total property type wise projects": "RERA",
+
+    # --------------------
+    # DEMAND (IGR + CGDB)
+    # --------------------
+    "Total units sold": "IGR-CGDB",
+    "Property type wise Units Sold": "IGR-CGDB",
+    "broad property types wise unit sold": "IGR-CGDB",
+    "BHK types wise units sold": "IGR-CGDB",
+
+    "Total Carpet Area sold or consumed in sqft": "IGR-CGDB",
+    "Property Type wise Carpet area sold or consumed in sqft": "IGR-CGDB",
+    "BHK wise Carpet Area sold or consumed in sqft": "IGR-CGDB",
+    "broad Property Type wise Carpet area sold or consumed in sqft": "IGR-CGDB",
+
+    "Property type wise Average Carpet Area in sqft": "IGR-CGDB",
+    "BHK wise Average Carpet Area in sqft": "IGR-CGDB",
+
+    "Property type wise Carpet Area range wise Units sold": "IGR-CGDB",
+    "BHK wise Carpet Area range wise Units sold": "IGR-CGDB",
+
+    "Property type wise Carpet area range wise Total sales (INR)": "IGR-CGDB",
+    "BHK wise Carpet area range wise Total sales(INR)": "IGR-CGDB",
+
+    "Property type wise carpet area range wise Carpet area  sold or consumed in sqft": "IGR-CGDB",
+    "BHK wise carpet area range wise carpet area  sold or consumed in sqft": "IGR-CGDB",
+
+    "No of Development agreement and Total area conveyed for development in Sqmtr": "DA",
+
+    # --------------------
+    # DEMOGRAPHY (IGR + CGDB)
+    # --------------------
+    "Property type wise Top 10 Buyer Pincode Percentage(%)": "IGR-CGDB",
+    "BHK wise Top 10 Buyer Pincode Unit Sold Percentage(%)": "IGR-CGDB",
+
+    "Property type wise Age Range wise unit sold Percentage(%)": "IGR-CGDB",
+    "BHK wise Age Range wise units sold Percentage(%)": "IGR-CGDB",
+
+    "Property type wise Top 10 Buyer Pincode wise Total sales (INR) Percentage(%)": "IGR-CGDB",
+    "BHK wise Top 10 Buyer Pincode wise Total sales (INR) Percentage(%)": "IGR-CGDB",
+
+    "Property type wise Top 10 Buyer Pincode wise Carpet Area sold or consumed in sqft Percentage(%)": "IGR-CGDB",
+    "BHK wise Top 10 Buyer Pincode wise Carpet Area sold or consumed in sqft Percentage(%)": "IGR-CGDB",
+
+    "Property type wise Age Range wise Carpet Area sold or consumed in sqft Percentage(%)": "IGR-CGDB",
+    "BHK wise Age Range wise Carpet Area sold or consumed in sqft Percentage(%)": "IGR-CGDB",
+
+    "Property type wise Age Range wise Total sales (INR) Percentage(%)": "IGR-CGDB",
+    "BHK wise Age Range wise Total sales (INR) Percentage(%)": "IGR-CGDB",
+
+    "Top buyer pincode": "IGR-CGDB",
+    "Top 10 Buyer Pincode units sold": "IGR-CGDB",
+
+    # --------------------
+    # PRICE (IGR + CGDB)
+    # --------------------
+    "Total sales (INR)": "IGR-CGDB",
+    "Property Type wise Total Sales (INR)": "IGR-CGDB",
+    "Property Type wise Average Price (INR)": "IGR-CGDB",
+
+    "BHK wise Total Sales (INR)": "IGR-CGDB",
+    "BHK wise Average Price (INR)": "IGR-CGDB",
+
+    "Broad Property category wise Total sales (INR)": "IGR-CGDB",
+    "Property category wise Average Price (INR)": "IGR-CGDB",
+
+    "Property Type Wise Average Price per Sq. Ft. (Carpet Area Basis)": "IGR-CGDB",
+    "Property Type Wise Percentile's Price per Sq. Ft. (Carpet Area Basis)": "IGR-CGDB",
+    "Property Type wise Most Prevailing Price per Sq.Ft. Range (Rupees per sq foot)": "IGR-CGDB",
+
+    "Property type wise  Price per Sq. Ft. range wise unit sold": "IGR-CGDB",
+    "Property type wise  Price per Sq. Ft. range wise total sales (INR)": "IGR-CGDB",
+    "Property type wise  Price per Sq. Ft. range wise Carpet area sold or consumed": "IGR-CGDB",
+
+    "Property type wise total price range wise unit sold": "IGR-CGDB",
+    "Property type wise total price range wise Total Sales(INR)": "IGR-CGDB",
+
+    "BHK type wise  Price per Sq. Ft. range wise unit sold": "IGR-CGDB",
+    "BHK type wise  Price per Sq. Ft. range wise total sales (INR)": "IGR-CGDB",
+    "BHK type wise total Price range wise total sales (INR)": "IGR-CGDB",
+
+    "Agreement price wise range Carpet area consumed": "IGR-CGDB",
+    "bhk wise Agreement price  range wise Carpet area consumed": "IGR-CGDB",
+
+    "total sales in developement agreement (DA)": "DA",
+    "Most prevailing rate for DA": "DA",
+
+    # --------------------
+    # SUPPLY (RERA)
+    # --------------------
+    "total units": "RERA",
+    "Property Type wise total units": "RERA",
+    "BHK wise total units": "RERA",
+
+    "Total Carpet Area (In sq ft)": "RERA",
+    "Property type wise Total Carpet Area (in sq ft)": "RERA",
+    "BHK wise total carpet area in sqft": "RERA",
+
+    "total carpet area consumed sqft according to RERA": "RERA",
+    "Property Type wise Carpet area consumed/absorbed in Sq ft as per rera": "RERA",
+    "BHK wise carpet area consumed in sqft according to RERA": "RERA",
+
+    "total fsi supplied according to RERA": "RERA",
+    "total plot area in sqmtr according to RERA": "RERA",
+
+    "Projects under construction as of the current date": "RERA",
+    "Completed Projects as of the current date": "RERA",
+    "Project-Phases under construction as of the current date": "RERA",
+    "Completed Project-phases as of the current date": "RERA",
+
+    "Total number of unique developers.": "RERA",
+
+    # --------------------
+    # MIXED / CALCULATED
+    # --------------------
+    "Location coordinates (Latitude- lat, Longitude- lng)": "IGR-CGDB",
+    "Total months to sell the unsold inventory.": "IGR+RERA",
+    "Miscellaneous": "Miscellaneous",
+}
+
 
 COLUMN_MAPPING_Project = {
     "Project Name": [
@@ -1115,6 +1245,68 @@ CATEGORY_MAPPING_Project = {
         "Property type wise unsold units",
     ],
 }
+
+SOURCE_MAPPING_Project = {
+
+    # -------------------------
+    # ALL (PROJECT MASTER DATA)
+    # -------------------------
+    "Project Name": "IGR/RERA",
+    "Project Location": "IGR/RERA",
+    "Project City": "IGR/RERA",
+    "Type of Project": "IGR/RERA",
+    "Project commencement date": "RERA",
+    "Project Completion date": "RERA",
+    "broad property types Share (%)": "RERA",
+    "total floors": "RERA",
+    "Project coordinates (Latitude- lat, Longitude- lng)": "IGR/RERA",
+    "Total Phases of Project": "RERA",
+    "Name of the organization/ Indvidual": "RERA",
+    "No of Buildings or Towers in Project": "RERA",
+
+    # -------------------------
+    # DEMAND
+    # -------------------------
+    "Units sold": "IGR/RERA",
+    "Total Carpet Area sold or consumed in sqmtr": "IGR/RERA",
+    "Property Type wise Unit Sold": "IGR/RERA",
+    "BHK Type wise Unit Sold": "IGR/RERA",
+    "BHK Type wise Carpet area sold or consumed in sqft": "IGR/RERA",
+    "Property Type wise Carpet area sold or consumed in Sqft": "IGR/RERA",
+
+    "Property type wise carpet area range wise unit sold": "IGR",
+    "Property type wise carpet area range wise total sales (INR)": "IGR",
+    "Bhk type wise carpet area range wise unit sold": "IGR",
+    "Bhk type wise carpet area range wise total sales (INR)": "IGR",
+    "Bhk type wise carpet area range wise average price (INR)": "IGR",
+    "BHK type wise average carpet area in sqft": "IGR",
+    "Property type wise average carpet area in sqft": "IGR",
+
+    # -------------------------
+    # DEMOGRAPHY
+    # -------------------------
+    "Top Buyer Pincode": "IGR",
+    "Top 10 Buyer Pincode": "IGR",
+
+    # -------------------------
+    # PRICE
+    # -------------------------
+    "Total sales (INR)": "IGR",
+    "Property Type wise Total Sales (INR)": "IGR",
+    "Property Type wise Average Price (INR)": "IGR",
+    "BHK type wise Total Sales (INR)": "IGR",
+    "BHK type wise Average Price (INR)": "IGR",
+
+    "Property Type Wise Average Price per Sq. Ft. (Carpet Area Basis)": "IGR",
+    "Property Type Wise Percentile's Price per Sq. Ft. (Carpet Area Basis)": "IGR",
+    "Property Type wise Current Rate (Rupees per sq foot)": "IGR",
+    "Property Type wise Most Prevailing Price per Sq.Ft. Range (Rupees per sq foot)": "IGR",
+    "BHK Type Wise Average Price per Sq. Ft. (Carpet Area Basis)": "IGR",
+
+    "Property type wise total price range wise unit sold": "IGR",
+    "Property type wise total price range wise Total Sales(INR)": "IGR",
+}
+
 
 
 COLUMN_MAPPING_City = {
@@ -1675,4 +1867,84 @@ CATEGORY_MAPPING_City = {
         "Total Number of Units",
         "Total Plot Area in Sqmtr",
     ],
+}
+SOURCE_MAPPING_City = {
+    # All / common
+    "Name of the City": "IGR/RERA",
+
+    # RERA (Supply + Launch/Completion)
+    "Total Project Launched": "RERA",
+    "Total Completed Project": "RERA",
+    "Total Phases Launched": "RERA",
+    "Total Completed Phases": "RERA",
+    "Total Buildings or Towers": "RERA",
+    "Total property type wise projects": "RERA",
+
+    # IGR (Demand)
+    "Carpet area sold or consumed": "IGR",
+    "Units Sold": "IGR",
+    "Property type wise unit sold": "IGR",
+    "Property type wise Carpet area sold or consumed": "IGR",
+    "BHK type wise unit sold": "IGR",
+    "BHK type wise Carpet area sold or consumed": "IGR",
+    "broad property types wise unit sold": "IGR",
+    "broad property type wise Carpet area sold or consumed": "IGR",
+    "Property type wise area range wise unit sold": "IGR",
+    "Property type wise area range wise total sales analysis (INR)": "IGR",
+    "Property type wise area range wise Carpet area sold or consumed": "IGR",
+    "BHK type wise area range wise unit sold": "IGR",
+    "BHK type wise area range wise total sales analysis (INR)": "IGR",
+    "BHK type wise area range wise Carpet area sold or consumed": "IGR",
+    "Property type wise average carpet area": "IGR",
+    "BHK type wise average carpet area": "IGR",
+
+    # IGR (Demography)
+    "Top buyer pincode": "IGR",
+    "Top 10 Buyer Pincode": "IGR",
+    "Property type wise top buyers pincode wise unit sold Percentage(%)": "IGR",
+    "Property type wise top buyers pincode wise total sales (INR) Percentage(%)": "IGR",
+    "Property type wise top buyers pincode wise Carpet area sold or consumed Percentage(%)": "IGR",
+    "BHK type wise top buyers pincode wise unit sold Percentage(%)": "IGR",
+    "BHK type wise top buyers pincode wise total sales (INR) Percentage(%)": "IGR",
+    "BHK type wise top buyers pincode wise Carpet area sold or consumed Percentage(%)": "IGR",
+    "Property type wise Age Range wise units sold Percentage(%)": "IGR",
+    "Property type wise Age Range wise total sales Percentage(%)": "IGR",
+    "Property type wise Age Range wise carpet area sold or consumed Percentage(%)": "IGR",
+    "BHK type wise Age Range wise units sold Percentage(%)": "IGR",
+    "BHK type wise Age Range wise total sales (INR) Percentage(%)": "IGR",
+    "BHK type wise Age Range wise carpet area sold or consumed Percentage(%)": "IGR",
+
+    # IGR (Price)
+    "Total sales (INR)": "IGR",
+    "Property type wise Total Sales (INR)": "IGR",
+    "Property type wise Average Price (INR)": "IGR",
+    "BHK wise Total sales (INR)": "IGR",
+    "BHK wise average price (INR)": "IGR",
+    "broad property type wise total sales (INR)": "IGR",
+    "broad property type wise average price (INR)": "IGR",
+    "Property Type Wise Average Price per Sq. Ft. (Carpet Area Basis)": "IGR",
+    "Property Type Wise Percentile's Price per Sq. Ft. (Carpet Area Basis)": "IGR",
+    "Property Type Wise most prevailing Price per Sq. Ft. (Carpet Area Basis)": "IGR",
+    "Property type wise Price (/sqft) range wise Units sold": "IGR",
+    "Property type wise Price (/sqft) range wise total sales (INR)": "IGR",
+    "Property type wise Price (/sqft) range wise carpet area sold or consumed": "IGR",
+    "Property type wise total price range wise unit sold": "IGR",
+    "Property type wise total price range wise total sales (INR)": "IGR",
+    "Property type wise total price range wise  carpet area sold or consumed": "IGR",
+    "BHK type wise Price (/sqft) range wise Units sold": "IGR",
+    "BHK type wise Price (/sqft) range wise total sales (INR)": "IGR",
+    "BHK type wise Price (/sqft) range wise carpet area sold or consumed": "IGR",
+    "BHK type wise total price range wise unit sold": "IGR",
+    "BHK type wise total price range wise total sales (INR)": "IGR",
+    "BHK type wise total price range wise  carpet area sold or consumed": "IGR",
+
+    # RERA (Supply)
+    "Total Number of Units": "RERA",
+    "Total Carpet Area": "RERA",
+    "Total FSI in Sqft": "RERA",
+    "Total Plot Area in Sqmtr": "RERA",
+    "Property type wise total units": "RERA",
+    "BHK type wise total units": "RERA",
+    "BHK type wise total carpet area": "RERA",
+    "Property type wise total carpet area": "RERA",
 }

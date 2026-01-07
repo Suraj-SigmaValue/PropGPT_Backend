@@ -183,3 +183,22 @@ class GetCategoriesResponseSerializer(serializers.Serializer):
     categories = serializers.ListField(child=serializers.CharField())
     comparison_type = serializers.CharField()
 
+class StructuredReportRequestSerializer(serializers.Serializer):
+    """Request for structured, analyst-grade report"""
+    sections = serializers.ListField(
+        child=serializers.CharField(),
+        required=False,
+        default=['executive_summary', 'market_overview', 'price_trend', 'location_snapshot']
+    )
+    preset = serializers.CharField(required=False, allow_null=True)
+    query = serializers.CharField(required=False, allow_null=True)
+    items = serializers.ListField(child=serializers.CharField(), required=False, allow_null=True, default=[])
+    comparison_type = serializers.CharField(required=False, allow_null=True)
+    categories = serializers.ListField(child=serializers.CharField(), required=False, default=[])
+    years = serializers.ListField(child=serializers.IntegerField(), required=False, default=[2020, 2021, 2022, 2023, 2024])
+
+class StructuredReportResponseSerializer(serializers.Serializer):
+    """Response with structured report content (HTML/PDF)"""
+    status = serializers.CharField()
+    message = serializers.CharField()
+    report_url = serializers.CharField(required=False)

@@ -37,5 +37,7 @@ urlpatterns = [
     path('feedback/', FeedbackView.as_view(), name='feedback'),
     
     # Reports
-    path('download-report/', DownloadReportView.as_view(), name='download_report'),
+    path('download-report/', DownloadReportView.as_view(), name='download_report'), # Kept for backward compatibility
+    path('download-basic-report/', DownloadReportView.as_view(), name='download_basic_report'),
+    path('generate-structured-report/', GenerateStructuredReportView.as_view(), name='generate_structured_report'),
 ]

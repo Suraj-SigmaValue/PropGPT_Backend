@@ -569,6 +569,9 @@ class MainQueryView(APIView):
                 chat_history = chat_history[-20:]
                 
             request.session['chat_history'] = chat_history
+            request.session['last_context_text'] = final_state.get('context_text', '')
+            request.session['last_query'] = query
+            request.session['last_comparison_type'] = comparison_type
             request.session.modified = True
             
             # Return response
@@ -705,3 +708,67 @@ class DownloadReportView(APIView):
         except Exception as e:
             logger.error(f"Error generating PDF: {e}")
             return HttpResponse(f"Error generating PDF: {str(e)}", status=500)
+
+@method_decorator(csrf_exempt, name='dispatch')
+class GenerateStructuredReportView(APIView):
+    """Generate a structured, analyst-grade report as PDF"""
+    
+    def post(self, request):
+        serializer = StructuredReportRequestSerializer(data=request.data)
+        if not serializer.is_valid():
+            logger.warning(f"Structured report validation failed: {serializer.errors}")
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        logger.info(f"Generating structured report for session: {request.session.session_key}")
+        query = serializer.validated_data.get('query') or request.session.get('last_query')
+        comparison_type = serializer.validated_data.get('comparison_type') or request.session.get('last_comparison_type')
+        items = serializer.validated_data.get('items', [])
+        sections = serializer.validated_data.get('sections', [])
+        preset = serializer.validated_data.get('preset')
+        
+        context_text = request.session.get('last_context_text', '')
+        chat_history = request.session.get('chat_history', [])
+        
+        if not context_text:
+            logger.warning(f"Report generation failed: No context_text in session for key {request.session.session_key}")
+            return Response({'error': 'No context available for report generation. Please run a query first.'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        logger.info(f"Report generation context size: {len(context_text)} chars, History: {len(chat_history)} messages")
+        try:
+            from core.report_generator import ReportGenerator
+            
+            # Initialize LLM
+            llm = get_llm('openai')
+            
+            # Initialize Generator
+            generator = ReportGenerator(
+                llm=llm,
+                context_text=context_text,
+                chat_history=chat_history,
+                query=query
+            )
+            
+            # Generate Report Content
+            html_template, sections_data = generator.generate_report(
+                selected_sections=sections,
+                preset=preset
+            )
+            
+            # Convert to PDF
+            pdf_content = generator.create_pdf(
+                html_template=html_template,
+                sections_data=sections_data,
+                session_id=request.session.session_key or "N/A"
+            )
+            
+            if not pdf_content:
+                return Response({'error': 'Failed to generate PDF'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                
+            response = HttpResponse(pdf_content, content_type='application/pdf')
+            response['Content-Disposition'] = f'attachment; filename="propgpt_structured_report_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf"'
+            
+            return response
+            
+        except Exception as e:
+            logger.exception(f"Error generating structured report: {e}")
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
