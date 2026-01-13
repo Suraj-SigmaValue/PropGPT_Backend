@@ -106,7 +106,7 @@ class GetCategoriesView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         
         comparison_type = serializer.validated_data['comparison_type']
-        
+        print("Comparison type:", comparison_type)
         try:
             # Get category mapping for the comparison type
             category_mapping = get_category_mapping(comparison_type)
@@ -561,6 +561,11 @@ class MainQueryView(APIView):
             contact_link = "\n\n[Please click here to contact our property expert](https://sigmavalue.in/contact/?page=contactform)"
             cleaned_response += contact_link
             
+            # Get selected columns with source information
+            from core.source_utils import get_columns_with_sources
+            selected_columns = final_state.get('selected_columns', [])
+            columns_with_sources = get_columns_with_sources(selected_columns, comparison_type)
+            
             # Update chat history
             chat_history.append({"role": "user", "content": query, "timestamp": datetime.now().isoformat()})
             chat_history.append({"role": "assistant", "content": cleaned_response, "timestamp": datetime.now().isoformat()})
@@ -578,7 +583,8 @@ class MainQueryView(APIView):
             response_data = {
                 'response_text': cleaned_response,
                 'mapping_keys': final_state.get('selected_keys', []),
-                'selected_columns': final_state.get('selected_columns', []),
+                'selected_columns': selected_columns,
+                'columns_with_sources': columns_with_sources,  # Added source information
                 'input_tokens': final_state.get('input_tokens', 0),
                 'output_tokens': final_state.get('output_tokens', 0),
                 'cached': False,

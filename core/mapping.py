@@ -1247,9 +1247,8 @@ CATEGORY_MAPPING_Project = {
 }
 
 SOURCE_MAPPING_Project = {
-
     # -------------------------
-    # ALL (PROJECT MASTER DATA)
+    # ALL
     # -------------------------
     "Project Name": "IGR/RERA",
     "Project Location": "IGR/RERA",
@@ -1296,17 +1295,49 @@ SOURCE_MAPPING_Project = {
     "Property Type wise Average Price (INR)": "IGR",
     "BHK type wise Total Sales (INR)": "IGR",
     "BHK type wise Average Price (INR)": "IGR",
-
     "Property Type Wise Average Price per Sq. Ft. (Carpet Area Basis)": "IGR",
     "Property Type Wise Percentile's Price per Sq. Ft. (Carpet Area Basis)": "IGR",
     "Property Type wise Current Rate (Rupees per sq foot)": "IGR",
     "Property Type wise Most Prevailing Price per Sq.Ft. Range (Rupees per sq foot)": "IGR",
     "BHK Type Wise Average Price per Sq. Ft. (Carpet Area Basis)": "IGR",
-
     "Property type wise total price range wise unit sold": "IGR",
     "Property type wise total price range wise Total Sales(INR)": "IGR",
-}
 
+    "Property type wise total price  range wise Carpet area sold or consumed": "IGR",
+    "BHK type wise total price range wise unit sold": "IGR",
+    "BHK type wise total price range wise Total Sales(INR)": "IGR",
+    "Bhk type wise total price  range wise Carpet area sold or consumed": "IGR",
+    "Property type wise  Price per Sq. Ft. range wise unit sold": "IGR",
+
+    # -------------------------
+    # SUPPLY
+    # -------------------------
+    "Total Units in Project": "RERA",
+    "Total Carpet Area in Sqmtr": "RERA",
+    "Property Type wise Total Units": "RERA",
+    "BHK Type wise Total Units": "RERA",
+    "BHK Type wise Total Carpet area in Sqmtr": "RERA",
+    "Property Type wise Total Carpet area supplied in Sqmtr": "RERA",
+    "Total FSI in Project in Sqmtr": "RERA",
+    "Property type and BHK type wise carpet area range in sqmtr": "RERA",
+    "Project Crapet area range in sqmtr": "RERA",
+
+    # Extra supply/meta rows in your table
+    "Summaized form of project": "RERA",
+    "Last transaction date of  project in our DB": "IGR",
+
+    # -------------------------
+    # UNSOLD
+    # -------------------------
+    "Projects Adopted Unsold units": "IGR/RERA",
+    "Property type wise unsold units": "IGR/RERA",
+    "BHK type wise unsold units": "IGR/RERA",
+
+    # -------------------------
+    # OTHER / INTERNAL
+    # -------------------------
+    "Unique identity of Project in our DB": "Internal/DB",
+}
 
 
 COLUMN_MAPPING_City = {
@@ -1787,7 +1818,6 @@ COLUMN_MAPPING_City = {
 
 
 }
-
 
 CATEGORY_MAPPING_City = {
     "all": [

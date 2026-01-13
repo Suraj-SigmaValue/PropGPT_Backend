@@ -29,6 +29,10 @@ class QueryResponseSerializer(serializers.Serializer):
     response_text = serializers.CharField()
     mapping_keys = serializers.ListField(child=serializers.CharField())
     selected_columns = serializers.ListField(child=serializers.CharField())
+    columns_with_sources = serializers.ListField(
+        child=serializers.DictField(),
+        required=False
+    )  # Added: columns enriched with source information
     input_tokens = serializers.IntegerField()
     output_tokens = serializers.IntegerField()
     cached = serializers.BooleanField()

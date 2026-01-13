@@ -336,6 +336,10 @@ CRITICAL: If the current query is a follow-up (e.g., "in bhk wise", "same for of
 1. Maintain ALL metrics from the previous query (e.g., if previous asked for "units sold AND carpet area", include both)
 2. Only change the dimension/filter as requested (e.g., property type → BHK type)
 3. Keep the same entities, years, and analysis depth
+4. For all price-related metrics, always specify the basis:
+   - Price ranges: "₹10,000 - ₹11,000 per sq ft (carpet area basis)"
+   - Average prices: "₹15,000 per sq ft (carpet area basis)"
+   - Never show price numbers without context/units
 
 REQUEST DETAILS:
 - Query: "{question}"
