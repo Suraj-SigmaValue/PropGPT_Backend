@@ -36,6 +36,7 @@ from .core_utils import (
     get_columns_for_keys,
     flatten_columns,
     count_tokens,
+    classify_query_intent,
 )
 
 from .config import EXCEL_FILE, PICKLE_FILE
@@ -69,6 +70,12 @@ class AgentState(TypedDict):
     output_tokens: int
     messages: Annotated[List[BaseMessage], operator.add]
     relevance_passed: bool
+    
+    # Routing fields
+    query_intent: str  # "NON_REAL_ESTATE", "FOLLOW_UP", "SIMPLE_REAL_ESTATE", "DATA_QUERY"
+    intent_reason: str  # Explanation from classifier
+    bypass_graph: bool  # Whether to skip graph processing
+    warning_message: str  # Warning for non-real estate queries
 
 
 def detect_requirements(query: str) -> List[str]:
@@ -91,6 +98,174 @@ def detect_requirements(query: str) -> List[str]:
         requirements.append("all")
 
     return sorted(list(set(requirements)))
+
+
+def query_router_node(state: AgentState) -> Dict[str, Any]:
+    """
+    Route queries based on intent classification.
+    Decides whether to continue to graph, bypass to direct LLM, or warn user.
+    """
+    logger.info("--- Node: Query Router ---")
+    
+    query = state.get("query", "") or ""
+    chat_history = state.get("chat_history", []) or []
+    llm = state.get("llm")
+    
+    if not llm:
+        from .config import get_llm
+        llm = get_llm()
+    
+    # Import classification function
+    from .core_utils import classify_query_intent
+    
+    # Classify query intent
+    classification = classify_query_intent(query, chat_history, llm)
+    intent = classification.get("intent", "DATA_QUERY")
+    reason = classification.get("reason", "")
+    
+    logger.info(f"Query classified as: {intent} - Reason: {reason}")
+    
+    # Determine routing based on intent
+    if intent == "NON_REAL_ESTATE":
+        warning_message = """I apologize, but I'm a specialized real estate assistant focused on property analysis, market trends, pricing, and related topics.
+
+Your question appears to be outside my area of expertise.
+
+I can help you with:
+- Property comparisons and market analysis
+- Pricing trends and rate analysis
+- Location-based insights
+- Demand and supply metrics
+- Project details and comparisons
+
+Please ask a real estate-related question, and I'll be happy to assist!"""
+        
+        return {
+            "query_intent": intent,
+            "intent_reason": reason,
+            "bypass_graph": True,
+            "warning_message": warning_message,
+            "final_response": warning_message,
+            "input_tokens": 0,
+            "output_tokens": 0
+        }
+    
+    elif intent in ["FOLLOW_UP", "SIMPLE_REAL_ESTATE"]:
+        # Bypass graph and use direct LLM
+        return {
+            "query_intent": intent,
+            "intent_reason": reason,
+            "bypass_graph": True,
+            "warning_message": ""
+        }
+    
+    else:
+        # DATA_QUERY - continue to graph pipeline
+        return {
+            "query_intent": intent,
+            "intent_reason": reason,
+            "bypass_graph": False,
+            "warning_message": ""
+        }
+
+
+def direct_llm_response_node(state: AgentState) -> Dict[str, Any]:
+    """
+    Generate response directly from LLM without graph processing.
+    Used for follow-ups and simple real estate questions.
+    """
+    logger.info("--- Node: Direct LLM Response ---")
+    
+    query = state.get("query", "") or ""
+    chat_history = state.get("chat_history", []) or []
+    context_text = state.get("context_text", "") or ""
+    llm = state.get("llm")
+    query_intent = state.get("query_intent", "FOLLOW_UP")
+    
+    if not llm:
+        from .config import get_llm
+        llm = get_llm()
+    
+    # Format chat history for context
+    history_context = ""
+    if chat_history:
+        recent = chat_history[-6:]  # Last 3 exchanges
+        history_lines = []
+        for msg in recent:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")[:500]  # Increased limit
+            history_lines.append(f"{role.capitalize()}: {content}")
+        history_context = "\n".join(history_lines)
+    
+    # Different prompts based on intent
+    if query_intent == "FOLLOW_UP":
+        prompt = f"""You are PropGPT, a real estate analysis assistant.
+The user is asking a follow-up question based on the previous conversation and data retrieved.
+
+RETRIEVED DATA CONTEXT (Use this as your primary source of facts):
+{context_text if context_text else "No specific data context available from the previous turnover."}
+
+RECENT CONVERSATION HISTORY:
+{history_context if history_context else "(No previous conversation)"}
+
+USER'S FOLLOW-UP QUESTION:
+"{query}"
+
+Respond strategically:
+1. If the user asks for YOUR OPINION or ANALYSIS of the data above, provide it professionally using those specific numbers.
+2. If the user asks for NEW data (e.g., "now show me commercial") that isn't in the context above, politely explain that you can't see that specific data in this turn and suggest they ask it as a fresh data query so the graph can retrieve it.
+3. Be conversational and helpful.
+
+DO NOT invent data. DO NOT provide purely generic responses if the data above is relevant.
+"""
+    else:  # SIMPLE_REAL_ESTATE
+        prompt = f"""You are PropGPT, a real estate analysis assistant with expertise in property markets and real estate concepts.
+
+The user is asking about a general real estate concept or definition.
+
+USER'S QUESTION:
+"{query}"
+
+Provide a clear, concise explanation. Include:
+1. A clear definition or explanation
+2. Practical examples if relevant
+3. How it's commonly used in real estate
+
+Keep your response informative but concise.
+"""
+    
+    try:
+        response = llm.invoke(prompt)
+        raw_text = getattr(response, "content", None) or str(response)
+        
+        from .core_utils import clean_response
+        cleaned_text = clean_response(raw_text)
+        
+        # Track tokens
+        usage = getattr(response, "usage_metadata", {}) or {}
+        input_tokens = int(usage.get("input_tokens", 0) or 0)
+        output_tokens = int(usage.get("output_tokens", 0) or 0)
+        
+        if input_tokens <= 0:
+            from .core_utils import count_tokens
+            input_tokens = count_tokens(prompt)
+        if output_tokens <= 0:
+            from .core_utils import count_tokens
+            output_tokens = count_tokens(cleaned_text)
+        
+        return {
+            "final_response": cleaned_text,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens
+        }
+        
+    except Exception as e:
+        logger.exception(f"Error in direct LLM response: {e}")
+        return {
+            "final_response": f"I encountered an error while processing your question: {str(e)}",
+            "input_tokens": 0,
+            "output_tokens": 0
+        }
 
 
 def load_mappings_node(state: AgentState) -> Dict[str, Any]:
@@ -465,17 +640,49 @@ def router(state: AgentState) -> str:
     return "refine"
 
 
+def intent_router(state: AgentState) -> str:
+    """Route based on query intent classification."""
+    intent = state.get("query_intent", "DATA_QUERY")
+    bypass = state.get("bypass_graph", False)
+    
+    if intent == "NON_REAL_ESTATE":
+        return "warn"  # Skip to END with warning message
+    elif bypass or intent in ["FOLLOW_UP", "SIMPLE_REAL_ESTATE"]:
+        return "direct_llm"  # Bypass graph and use direct LLM
+    else:
+        return "graph_pipeline"  # Continue to normal graph processing
+
+
 def create_graph():
     workflow = StateGraph(AgentState)
 
+    # Add all nodes
+    workflow.add_node("query_router", query_router_node)
+    workflow.add_node("direct_llm_response", direct_llm_response_node)
     workflow.add_node("load_mappings", load_mappings_node)
     workflow.add_node("smart_filter", smart_filter_node)
     workflow.add_node("retrieval", retrieval_node)
     workflow.add_node("check_relevance", check_relevance_node)
     workflow.add_node("generate_response", generate_response_node)
 
-    workflow.set_entry_point("load_mappings")
+    # Set query_router as entry point
+    workflow.set_entry_point("query_router")
 
+    # Conditional routing from query_router
+    workflow.add_conditional_edges(
+        "query_router",
+        intent_router,
+        {
+            "warn": END,  # Non-real estate queries end immediately
+            "direct_llm": "direct_llm_response",  # Follow-ups and simple questions
+            "graph_pipeline": "load_mappings"  # Data queries continue to graph
+        }
+    )
+
+    # Direct LLM path goes straight to END
+    workflow.add_edge("direct_llm_response", END)
+
+    # Existing graph pipeline flow (unchanged)
     workflow.add_edge("load_mappings", "smart_filter")
     workflow.add_edge("smart_filter", "retrieval")
     workflow.add_edge("retrieval", "check_relevance")

@@ -27,7 +27,7 @@ from core.agents import planner_identify_mapping_keys, agent_pick_relevant_colum
 from core.graph_agent import create_graph
 from core.prompts import build_location_prompt, build_city_prompt, build_project_prompt
 from langchain_core.messages import HumanMessage, AIMessage
-from core.time_estimate import estimate_processing_time
+from core.time_estimate import estimate_processing_time, get_time_estimate_message
 
 logger = logging.getLogger(__name__)
 
@@ -232,8 +232,17 @@ class GraphExecuteView(APIView):
         candidate_keys = serializer.validated_data['candidate_keys']
         print(f"here is the candidate_keys: {candidate_keys}")
         llm_provider = serializer.validated_data.get('llm_provider', 'openai')
-        print(f"GraphExecuteView: Received request with query=")
+        items = serializer.validated_data.get('items', []) or request.session.get('last_items', [])
+        years = serializer.validated_data.get('years') or request.session.get('last_years', [2020, 2021, 2022, 2023, 2024])
+        categories = serializer.validated_data.get('categories', []) or request.session.get('last_categories', [])
         
+        print(f"GraphExecuteView: Received request with query={query}")
+        
+        # Initialize session
+        if not request.session.session_key:
+            request.session.create()
+        session_key = request.session.session_key
+
         try:
             # Get LLM and graph app
             llm = get_llm(llm_provider)
@@ -242,26 +251,67 @@ class GraphExecuteView(APIView):
             # Prepare initial state
             initial_state = {
                 "query": query,
+                "items": items,
                 "comparison_type": comparison_type,
+                "years": years,
+                "categories": categories,
                 "candidate_keys": candidate_keys,
                 "candidate_columns": [],
                 "llm": llm,
                 "selected_keys": [],
                 "selected_columns": [],
+                "chat_history": request.session.get('chat_history', []),
+                "context_text": request.session.get('last_context_text', ''),
                 "iteration_count": 0,
                 "messages": []
             }
             print(f"Initial state prepared:")
+
+            # Calculate estimated time
+            estimated_time = estimate_processing_time(
+                query=query,
+                items=items,
+                categories=categories,
+                years=years,
+                comparison_type=comparison_type
+            )
+            estimated_time_msg = get_time_estimate_message(estimated_time)
             
             # Execute graph (ZERO modification)
             config = {"configurable": {"thread_id": request.session.session_key or "default"}}
             final_state = app.invoke(initial_state, config=config)
             print(f"Graph execution completed:")
+            # Save results to session for report generation
+            final_response = final_state.get('final_response', '')
+            chat_history = request.session.get('chat_history', [])
+            if final_response:
+                chat_history.append({"role": "user", "content": query, "timestamp": datetime.now().isoformat()})
+                chat_history.append({"role": "assistant", "content": final_response, "timestamp": datetime.now().isoformat()})
+                if len(chat_history) > 20:
+                    chat_history = chat_history[-20:]
+                request.session['chat_history'] = chat_history
+            
+            graph_context = final_state.get('context_text', '')
+            if graph_context:
+                request.session['last_context_text'] = graph_context
+            
+            request.session['last_query'] = query
+            request.session['last_comparison_type'] = comparison_type
+            request.session['last_items'] = items
+            request.session['last_years'] = years
+            request.session['last_categories'] = categories
+            request.session.modified = True
+
             response_data = {
                 'selected_keys': final_state.get('selected_keys', []),
                 'selected_columns': final_state.get('selected_columns', []),
                 'messages': [{'role': m.type, 'content': m.content} for m in final_state.get('messages', [])],
-                'iteration_count': final_state.get('iteration_count', 0)
+                'iteration_count': final_state.get('iteration_count', 0),
+                'estimated_time_seconds': estimated_time,
+                'estimated_time_message': estimated_time_msg,
+                'final_response': final_response,
+                'context_text': graph_context,
+                'session_id': session_key
             }
             response_serializer = GraphExecuteResponseSerializer(response_data)
             print(f"Graph execution completed_2:")
@@ -510,6 +560,7 @@ class MainQueryView(APIView):
         if last_config_hash and last_config_hash != config_hash:
             logger.info(f"Configuration changed for session {session_key}. Refreshing memory.")
             request.session['chat_history'] = []
+            request.session['last_context_text'] = '' # Clear context on config change
             # We will use a unique thread_id for each config to effectively "reset" memory
             thread_id = f"{session_key}_{config_hash}"
         else:
@@ -527,7 +578,8 @@ class MainQueryView(APIView):
                 years=years,
                 comparison_type=comparison_type
             )
-            logger.info(f"Estimated processing time: {estimated_time} seconds")
+            estimated_time_msg = get_time_estimate_message(estimated_time)
+            logger.info(f"Estimated processing time: {estimated_time} seconds ({estimated_time_msg})")
             
             # Get LLM and Graph App
             llm = get_llm(response_llm_provider)
@@ -547,6 +599,7 @@ class MainQueryView(APIView):
                 "candidate_columns": [],
                 "selected_keys": [],
                 "selected_columns": [],
+                "context_text": request.session.get('last_context_text', ''),
                 "messages": [HumanMessage(content=query)],
                 "iteration_count": 0
             }
@@ -574,7 +627,12 @@ class MainQueryView(APIView):
                 chat_history = chat_history[-20:]
                 
             request.session['chat_history'] = chat_history
-            request.session['last_context_text'] = final_state.get('context_text', '')
+            
+            # Preserve context if it's a follow-up (which doesn't produce new context)
+            graph_context = final_state.get('context_text', '')
+            if graph_context:
+                request.session['last_context_text'] = graph_context
+            
             request.session['last_query'] = query
             request.session['last_comparison_type'] = comparison_type
             request.session.modified = True
@@ -589,6 +647,7 @@ class MainQueryView(APIView):
                 'output_tokens': final_state.get('output_tokens', 0),
                 'cached': False,
                 'estimated_time_seconds': estimated_time,  # Include estimated time
+                'estimated_time_message': estimated_time_msg, # Include human-friendly message
                 'session_id': request.session.session_key
             }
             
@@ -605,7 +664,18 @@ class DownloadReportView(APIView):
     """Download chat history as PDF"""
     
     def get(self, request):
-        chat_history = request.session.get('chat_history', [])
+        session_id = request.GET.get('session_id')
+        session_data = request.session
+        
+        if session_id and not session_data.get('chat_history'):
+            from django.contrib.sessions.models import Session
+            try:
+                s = Session.objects.get(session_key=session_id)
+                session_data = s.get_decoded()
+            except Exception as e:
+                logger.warning(f"Could not load session {session_id} manually: {e}")
+
+        chat_history = session_data.get('chat_history', [])
         
         if not chat_history:
              # If no history, return simple message
@@ -629,6 +699,7 @@ class DownloadReportView(APIView):
         html_string = """
         <html>
         <head>
+            <meta charset="UTF-8">
             <style>
                 @page { size: A4; margin: 2cm; }
                 body { font-family: Helvetica, sans-serif; font-size: 11px; line-height: 1.4; color: #333; }
@@ -725,19 +796,39 @@ class GenerateStructuredReportView(APIView):
             logger.warning(f"Structured report validation failed: {serializer.errors}")
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         
-        logger.info(f"Generating structured report for session: {request.session.session_key}")
-        query = serializer.validated_data.get('query') or request.session.get('last_query')
-        comparison_type = serializer.validated_data.get('comparison_type') or request.session.get('last_comparison_type')
+        # Ensure session exists
+        if not request.session.session_key:
+            request.session.create()
+        
+        session_key = serializer.validated_data.get('session_id') or request.session.session_key
+        session_data = request.session
+        
+        if session_key and not session_data.get('last_context_text'):
+            from django.contrib.sessions.models import Session
+            try:
+                s = Session.objects.get(session_key=session_key)
+                session_data = s.get_decoded()
+                logger.info(f"Manually loaded session data for {session_key}")
+            except Exception as e:
+                logger.warning(f"Could not load session {session_key} manually: {e}")
+
+        logger.info(f"Generating structured report for session: {session_key}")
+        
+        query = serializer.validated_data.get('query') or session_data.get('last_query')
+        comparison_type = serializer.validated_data.get('comparison_type') or session_data.get('last_comparison_type')
         items = serializer.validated_data.get('items', [])
         sections = serializer.validated_data.get('sections', [])
         preset = serializer.validated_data.get('preset')
         
-        context_text = request.session.get('last_context_text', '')
-        chat_history = request.session.get('chat_history', [])
+        context_text = session_data.get('last_context_text', '')
+        chat_history = session_data.get('chat_history', [])
         
         if not context_text:
-            logger.warning(f"Report generation failed: No context_text in session for key {request.session.session_key}")
-            return Response({'error': 'No context available for report generation. Please run a query first.'}, status=status.HTTP_400_BAD_REQUEST)
+            logger.warning(f"Report generation failed: No context_text in session for key {session_key}")
+            return Response({
+                'error': 'No context available for report generation. Please run a query first.',
+                'hint': 'You need to submit at least one query before generating a report.'
+            }, status=status.HTTP_400_BAD_REQUEST)
             
         logger.info(f"Report generation context size: {len(context_text)} chars, History: {len(chat_history)} messages")
         try:

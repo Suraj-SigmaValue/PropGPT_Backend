@@ -38,6 +38,7 @@ class QueryResponseSerializer(serializers.Serializer):
     cached = serializers.BooleanField()
     cache_metadata = serializers.DictField(required=False)
     estimated_time_seconds = serializers.IntegerField(required=False)  # Estimated processing time
+    estimated_time_message = serializers.CharField(required=False)    # Human-friendly message
 
 
 class MappingKeysRequestSerializer(serializers.Serializer):
@@ -149,6 +150,9 @@ class GraphExecuteRequestSerializer(serializers.Serializer):
     comparison_type = serializers.CharField(required=True)
     candidate_keys = serializers.ListField(child=serializers.CharField(), required=True)
     llm_provider = serializers.CharField(default='openai')
+    items = serializers.ListField(child=serializers.CharField(), required=False, default=[])
+    years = serializers.ListField(child=serializers.IntegerField(), required=False, default=[2020, 2021, 2022, 2023, 2024])
+    categories = serializers.ListField(child=serializers.CharField(), required=False, default=[])
 
 
 class GraphExecuteResponseSerializer(serializers.Serializer):
@@ -157,6 +161,11 @@ class GraphExecuteResponseSerializer(serializers.Serializer):
     selected_columns = serializers.ListField(child=serializers.CharField())
     messages = serializers.ListField(child=serializers.DictField())
     iteration_count = serializers.IntegerField()
+    estimated_time_seconds = serializers.IntegerField(required=False)
+    estimated_time_message = serializers.CharField(required=False)
+    final_response = serializers.CharField(required=False, allow_blank=True)
+    context_text = serializers.CharField(required=False, allow_blank=True)
+    session_id = serializers.CharField(required=False)
 
 
 class ProjectRecommendationsRequestSerializer(serializers.Serializer):
@@ -200,6 +209,7 @@ class StructuredReportRequestSerializer(serializers.Serializer):
     comparison_type = serializers.CharField(required=False, allow_null=True)
     categories = serializers.ListField(child=serializers.CharField(), required=False, default=[])
     years = serializers.ListField(child=serializers.IntegerField(), required=False, default=[2020, 2021, 2022, 2023, 2024])
+    session_id = serializers.CharField(required=False, allow_null=True)
 
 class StructuredReportResponseSerializer(serializers.Serializer):
     """Response with structured report content (HTML/PDF)"""

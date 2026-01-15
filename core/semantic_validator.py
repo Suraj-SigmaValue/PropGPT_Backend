@@ -85,6 +85,8 @@ class SemanticValidator:
                 (r"demographic analysis", "demography"),
                 (r"buyer.*profile", "demography"),
                 (r"pincode analysis", "demography"),
+                (r"pincode", "demography"),
+                (r"pin code", "demography"),
                 (r"age.*analysis", "demography"),
                 (r"where.*buyers.*from", "demography")
             ],

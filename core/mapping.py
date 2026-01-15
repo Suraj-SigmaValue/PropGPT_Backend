@@ -622,7 +622,7 @@ COLUMN_MAPPING_Location = {
 }
 
 CATEGORY_MAPPING_Location = {
-    "all": [
+    "General": [
         "Location",
         "Total Buildings or Towers",
         "Total Phases Launched",
@@ -1176,7 +1176,7 @@ COLUMN_MAPPING_Project = {
 }
 
 CATEGORY_MAPPING_Project = {
-    "all": [
+    "General": [
         "Name of the organization/ Indvidual",
         "No of Buildings or Towers in Project",
         "Project City",
@@ -1820,7 +1820,7 @@ COLUMN_MAPPING_City = {
 }
 
 CATEGORY_MAPPING_City = {
-    "all": [
+    "General": [
         "Name of the City",
         "Total Buildings or Towers",
         "Total Completed Phases",

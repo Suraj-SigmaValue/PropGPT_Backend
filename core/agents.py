@@ -99,7 +99,7 @@ class KeyProfile:
 # Category Synonyms
 # -----------------------------
 CATEGORY_KEYWORDS = {
-    "demography": ["user", "users", "people", "buyer", "buyers", "origin", "location", "coming", "from", "where", "profile", "Demographic"],
+    "demography": ["user", "users", "people", "buyer", "buyers", "origin", "location", "coming", "from", "where", "profile", "Demographic", "pincode", "pin code", "zip code"],
     # Add other categories here if needed
 }
 
@@ -137,6 +137,10 @@ def _build_profiles(mapping_dict: Dict[str, List[str]], category_mapping: Option
         # This ensuring queries like "office sales" match "Property type wise..." keys instead of just "Total sales"
         if "property type" in k_lower:
             extra_tokens.extend(["flat", "office", "shop", "commercial", "residential", "apartment", "others"])
+
+        # Feature: Enrich Pincode keys with location/origin tokens
+        if "pincode" in k_lower or "pin code" in k_lower:
+            extra_tokens.extend(["where", "from", "origin", "location", "buyer", "zip code"])
 
         # Key Tokens
         
@@ -346,6 +350,7 @@ def planner_identify_mapping_keys(
             "You are a mapping-key selector. Choose the best keys to answer the user query. "
             "Return ONLY a JSON array of keys chosen from SHORTLIST. No extra text. "
             "If User Ask for range related analysis, we will boost the keys that look like ranges. "
+            "If User Ask for pincode, zip code, or location analysis, we will boost pincode related keys. "
             "if User Did not Specify Property Type, then give Priority 1st to broad type (Residential+ Commercial) "
             "Priority 2nd to Property Keys ('flat', 'office', 'shop') and Priority 3rd to BHK wise"
         ) 

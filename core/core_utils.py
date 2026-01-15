@@ -756,3 +756,108 @@ Response:"""
     except Exception as e:
         logger.warning(f"Relevance check failed: {e}. Assuming relevant.")
         return True
+
+
+def classify_query_intent(query: str, chat_history: List[Dict[str, str]], llm) -> Dict[str, Any]:
+    """
+    Classify query intent to determine routing path.
+    
+    Args:
+        query: User's query string
+        chat_history: List of previous chat messages
+        llm: Language model instance
+    
+    Returns:
+        {
+            "intent": "non_real_estate" | "follow_up" | "simple_real_estate" | "data_query",
+            "reason": "explanation",
+            "requires_data": bool
+        }
+    """
+    # Format recent chat history (last 3 exchanges)
+    recent_history = chat_history[-6:] if len(chat_history) > 6 else chat_history
+    history_text = ""
+    if recent_history:
+        history_text = "\n".join([
+            f"{'User' if msg.get('role') == 'user' else 'Assistant'}: {msg.get('content', '')[:100]}..."
+            for msg in recent_history
+        ])
+    else:
+        history_text = "(No previous conversation)"
+    
+    classification_prompt = f"""You are a specialized query classifier for PropGPT, a real estate investment AI.
+Your task is to route the query to the correct processing path.
+
+CURRENT QUERY: "{query}"
+
+RECENT CHAT HISTORY:
+{history_text}
+
+CLASSIFICATION CATEGORIES:
+
+1. **FOLLOW_UP** - Direct LLM response Needed.
+   - Conversational follow-ups: "thanks", "got it", "hello", "interesting".
+   - Opinion/Advice requests about the PREVIOUS turn: "What do you think?", "Should I invest here?", "Is this better than that one?", "Which is the winner?", "Is this risky?", "what is your point of view?"
+   - Clarifications about data already shown: "what does that ₹ price mean?", "explain the percentage".
+   - *RULE*: Use this if the query can be perfectly answered using ONLY the chat history and context already retrieved.
+
+2. **DATA_QUERY** - Graph RAG Pipeline Needed.
+   - Any query asking for NEW locations, cities, or projects.
+   - Any query asking for NEW data categories (e.g., asking for 'commercial' when only 'residential' was shown).
+   - "Deep dives" that require fresh table retrieval: "now show me year-by-year counts", "give me the raw numbers for those".
+   - *RULE*: Use this if the user is pivoting to a new topic or needs a fresh set of data metrics.
+
+3. **SIMPLE_REAL_ESTATE** - Direct LLM response Needed.
+   - Educational/Concept questions: "What is ROI?", "Define FSI", "Explain stamp duty".
+   - General market knowledge not tied to specific project data.
+
+4. **NON_REAL_ESTATE** - Warning Needed.
+   - Anything unrelated to property, economics, or real estate.
+
+IMPORTANT HINTS:
+- If the user uses "here", "this", "that", "these", "those" to refer to the data already analyzed, it is likely a FOLLOW_UP.
+- If the user asks for investment advice or an opinion on the results shown, it is a FOLLOW_UP.
+- If the user provides a completely new city or location name, it MUST be a DATA_QUERY.
+- If in doubt between FOLLOW_UP and DATA_QUERY, choose DATA_QUERY to ensure accuracy.
+
+Respond in this EXACT JSON format:
+{{
+  "intent": "NON_REAL_ESTATE|FOLLOW_UP|SIMPLE_REAL_ESTATE|DATA_QUERY",
+  "reason": "Brief explanation",
+  "requires_data": true|false
+}}"""
+
+    try:
+        response = llm.invoke(classification_prompt)
+        response_text = response.content if hasattr(response, 'content') else str(response)
+        
+        # Parse JSON response
+        import re
+        json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+        if json_match:
+            result = json.loads(json_match.group(0))
+            
+            # Validate intent value
+            valid_intents = ["NON_REAL_ESTATE", "FOLLOW_UP", "SIMPLE_REAL_ESTATE", "DATA_QUERY"]
+            intent = result.get("intent", "DATA_QUERY")
+            if intent not in valid_intents:
+                logger.warning(f"Invalid intent '{intent}', defaulting to DATA_QUERY")
+                intent = "DATA_QUERY"
+            
+            return {
+                "intent": intent,
+                "reason": result.get("reason", "No reason provided"),
+                "requires_data": result.get("requires_data", intent == "DATA_QUERY")
+            }
+        else:
+            raise ValueError("No JSON found in LLM response")
+            
+    except Exception as e:
+        logger.error(f"Query classification failed: {e}. Defaulting to DATA_QUERY")
+        # Safe fallback: assume data query to preserve existing behavior
+        return {
+            "intent": "DATA_QUERY",
+            "reason": f"Classification failed: {str(e)}",
+            "requires_data": True
+        }
+
