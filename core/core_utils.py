@@ -13,7 +13,10 @@ from typing import Any, Dict, List, Union
 import textwrap
 import ast
 import pandas as pd
+import pickle
 import tiktoken
+import threading
+import time
 from dotenv import load_dotenv
 
 os.environ["TRANSFORMERS_NO_TF_IMPORT"] = "1"
@@ -55,6 +58,9 @@ load_dotenv()
 CATEGORY_MAPPING = None
 COLUMN_MAPPING = None
 RESOLVED_ID_COLS = {}
+
+# Global lock for pickle file generation to prevent race conditions
+_PICKLE_GENERATION_LOCK = threading.Lock()
 
 
 def load_mappings(comparison_type: str):
@@ -190,6 +196,7 @@ def initialize_dataframe(base_dir: Path):
         
         df_all = pd.concat(combined, ignore_index=True)
         joblib.dump(df_all, pickle_path)
+        logger.info(f"Pickle file saved successfully at {pickle_path}. Shape: {df_all.shape}")
         
         # Invalidate cache if data is re-initialized (Cache removed)
         # global _GLOBAL_DATA_CACHE
@@ -205,14 +212,34 @@ def initialize_dataframe(base_dir: Path):
 
 def load_and_clean_data(excel_path, pickle_path, comparison_type, items=None, years=None, category=None):
     try:
+        df = None
         # Load directly from Disk (Pickle) to avoid RAM hanging issues
         if Path(pickle_path).exists():
-            df = joblib.load(pickle_path)
-            df.columns = [normalize_colname(str(c)) for c in df.columns]
-            logger.info(f"Pickle file loaded from DISK. Shape: {df.shape}")
+            # Try to load existing pickle file
+            try:
+                df = joblib.load(pickle_path)
+                df.columns = [normalize_colname(str(c)) for c in df.columns]
+                logger.info(f"Pickle file loaded from DISK. Shape: {df.shape}")
+            except (EOFError, pickle.UnpicklingError, Exception) as e:
+                logger.warning(f"Pickle file corrupted or unreadable: {e}. Regenerating from Excel...")
+                # Delete corrupted file
+                try:
+                    os.remove(pickle_path)
+                except:
+                    pass
+                # Regenerate
+                df = initialize_dataframe(Path(pickle_path).parent)
+                if df is None or df.empty:
+                    logger.error("Failed to regenerate pickle file from Excel")
+                    return None, None, None
+                logger.info(f"Pickle file regenerated successfully after corruption. Shape: {df.shape}")
         else:
-            logger.error(f"Pickle file not found at {pickle_path}")
-            return None, None, None
+            logger.warning(f"Pickle file not found at {pickle_path}. Generating from Excel...")
+            df = initialize_dataframe(Path(pickle_path).parent)
+            if df is None or df.empty:
+                logger.error("Failed to generate pickle file from Excel")
+                return None, None, None
+            logger.info(f"Pickle file generated successfully. Shape: {df.shape}")
         
         # Filter by comparison type
         df = df[df["__type"] == comparison_type].drop(columns=["__type"])
@@ -670,20 +697,45 @@ def get_comparison_items(comparison_type, base_dir: Path):
     """Returns available items for comparison type (locations/cities/projects)"""
     try:
         pickle_path = base_dir / PICKLE_FILE
+        df = None
         
         if not pickle_path.exists():
-            logger.error("Pickle file not found")
-            return []
+            logger.warning(f"Pickle file not found at {pickle_path}. Generating from Excel...")
+            df = initialize_dataframe(base_dir)
+            if df is None or df.empty:
+                logger.error("Failed to generate pickle file from Excel")
+                return []
+            logger.info("Pickle file generated successfully")
+        else:
+            # Try to load existing pickle file
+            try:
+                df = joblib.load(pickle_path)
+                df.columns = [normalize_colname(str(c)) for c in df.columns]
+            except (EOFError, pickle.UnpicklingError, Exception) as e:
+                logger.warning(f"Pickle file corrupted or unreadable: {e}. Regenerating from Excel...")
+                # Delete corrupted file
+                try:
+                    os.remove(pickle_path)
+                except:
+                    pass
+                # Regenerate
+                df = initialize_dataframe(base_dir)
+                if df is None or df.empty:
+                    logger.error("Failed to regenerate pickle file from Excel")
+                    return []
+                logger.info("Pickle file regenerated successfully after corruption")
         
-        df = joblib.load(pickle_path)
-        df.columns = [normalize_colname(str(c)) for c in df.columns]
         
         # Filter for comparison type
+        logger.debug(f"Filtering data for comparison_type: '{comparison_type}'")
+        logger.debug(f"Available __type values in dataframe: {df['__type'].unique().tolist()}")
         df_type = df[df["__type"] == comparison_type]
+        logger.debug(f"Filtered dataframe has {len(df_type)} rows for comparison_type='{comparison_type}'")
         
         # Resolve ID column
         configured_id = SHEET_CONFIG[comparison_type]["id_col"]
         id_col = configured_id
+        logger.debug(f"Looking for ID column '{configured_id}' for {comparison_type}")
         
         if id_col not in df_type.columns:
             cols_norm = {normalize_colname(str(c)): c for c in df_type.columns}
