@@ -823,12 +823,25 @@ class GenerateStructuredReportView(APIView):
         context_text = session_data.get('last_context_text', '')
         chat_history = session_data.get('chat_history', [])
         
+        # DEBUG: Log all session keys to understand what's missing
+        logger.info(f"Session Keys for {session_key}: {list(session_data.keys())}")
+        
         if not context_text:
-            logger.warning(f"Report generation failed: No context_text in session for key {session_key}")
-            return Response({
-                'error': 'No context available for report generation. Please run a query first.',
-                'hint': 'You need to submit at least one query before generating a report.'
-            }, status=status.HTTP_400_BAD_REQUEST)
+             logger.warning(f"Generating report with empty context. History size: {len(chat_history)}")
+             
+        # Normalize query if missing
+        if not query:
+            if chat_history:
+                # Use last user message as query
+                for msg in reversed(chat_history):
+                    if msg.get('role') == 'user':
+                        query = msg.get('content')
+                        break
+            
+            if not query:
+                query = "Real Estate Market Report" # Default title
+
+        logger.info(f"Report generation context size: {len(context_text)} chars, History: {len(chat_history)} messages, Query: {query}")
             
         logger.info(f"Report generation context size: {len(context_text)} chars, History: {len(chat_history)} messages")
         try:

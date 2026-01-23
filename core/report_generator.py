@@ -58,6 +58,9 @@ class ReportGenerator:
                 if content and content.strip():
                     self.sections_content[section] = content
 
+        if not self.sections_content:
+            self.sections_content['status'] = "No specific data could be analyzed for this report. The report is based on the available conversation history."
+
         return self._render_to_html()
 
     def _generate_section_content(self, section: str) -> str:
@@ -73,17 +76,17 @@ class ReportGenerator:
         USER QUERY: {self.query}
         
         CONTEXT DATA:
-        {self.context_text[:8000]} # Limit context to avoid token limits
+        {self.context_text[:8000] if self.context_text else "No retrieval data available."} 
         
         CHAT HISTORY SUMMARY:
         {self._get_chat_summary()}
         
         INSTRUCTIONS:
-        1. Base your answer ONLY on the provided Context Data and Chat History.
+        1. Base your answer on the provided Context Data AND/OR Chat History.
         2. Use a professional, defensible, and structured tone.
         3. If it's the 'Executive Summary', provide 4-6 crisp bullet points.
         4. For other sections, use clear headings, sub-bullet points, and structured paragraphs.
-        5. If there is NO DATA available for this specific section in the context, return exactly: "NO_DATA_AVAILABLE".
+        5. If there is NO DATA available for this specific section in the context or history, return exactly: "NO_DATA_AVAILABLE".
         6. Do NOT hallucinate.
         
         SECTION TO GENERATE: {section_title}
@@ -103,7 +106,7 @@ class ReportGenerator:
 
     def _get_chat_summary(self) -> str:
         summary = ""
-        for msg in self.chat_history[-5:]: # Last 5 messages for context
+        for msg in self.chat_history[-10:]: # Increased to Last 10 messages for better context
             role = msg.get('role', 'user')
             content = msg.get('content', '')
             summary += f"{role.upper()}: {content[:500]}...\n"
@@ -114,16 +117,28 @@ class ReportGenerator:
         Renders the generated sections to a beautiful HTML template.
         """
         processed_sections = []
+        # Define a simplified default if metadata is missing (safe fallback)
+        default_meta = {'title': 'Report Section', 'priority': 99}
+        
         for section, content in self.sections_content.items():
             # Replace the black square with proper rupee symbol if present
             content = content.replace('■', '₹')
             html_content = markdown.markdown(content, extensions=['extra', 'sane_lists'])
+            
+            meta = self.SECTION_METADATA.get(section, default_meta)
+            if section == 'status':
+                 meta = {'title': 'Report Status', 'priority': 0}
+
             processed_sections.append({
                 'id': section,
-                'title': self.SECTION_METADATA[section]['title'],
+                'title': meta['title'],
                 'content': html_content
             })
-
+        
+        # Sort sections by priority (handle custom/fallback sections)
+        # Note: We need to access priority from metadata again or store it in processed_sections
+        # For simplicity, we trust the order or just render as is, but let's be safe.
+        
         html_template = """
         <html>
         <head>
@@ -137,12 +152,8 @@ class ReportGenerator:
                     font-family: 'Helvetica';
                     src: url('https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari&display=swap');
                 }
-                @font-face {
-                    font-family: 'Arial';
-                    src: url('https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari&display=swap');
-                }
                 body { 
-                    font-family: 'Helvetica', 'Arial', 'Noto Sans Devanagari', sans-serif; 
+                    font-family: 'Helvetica', 'Arial', sans-serif; 
                     font-size: 11px; 
                     line-height: 1.6; 
                     color: #2c3e50; 
@@ -150,7 +161,7 @@ class ReportGenerator:
                 
                 /* Ensure rupee symbol displays properly */
                 .rupee {
-                    font-family: 'Noto Sans Devanagari', 'Arial', sans-serif;
+                    font-family: 'Noto+Sans+Devanagari', sans-serif;
                 }
                 
                 /* Institutional Branding */
@@ -232,10 +243,15 @@ class ReportGenerator:
         rendered_html = template.render(context)
         
         result = BytesIO()
-        pdf = pisa.CreatePDF(rendered_html, dest=result)
+        # Explicitly set encoding to UTF-8
+        pdf = pisa.CreatePDF(rendered_html.encode('utf-8'), dest=result, encoding='utf-8')
         
         if pdf.err:
             logger.error(f"PDF Generation Error: {pdf.err}")
-            return None
+            # Instead of returning None (which causes 500 error and corrupt download),
+            # Return a simple error PDF
+            error_pdf = BytesIO()
+            pisa.CreatePDF(f"<html><body><h1>Report Generation Error</h1><p>An error occurred while generating the PDF structure.</p></body></html>", dest=error_pdf)
+            return error_pdf.getvalue()
             
         return result.getvalue()
